@@ -1,0 +1,7 @@
+/target/
+/.tools/
+/graphify-out/
+.env
+.env.*
+!.env.example
+*.log
