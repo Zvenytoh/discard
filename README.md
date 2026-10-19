@@ -1,55 +1,127 @@
-# Discard
+<div align="center">
+  <img src="assets/logo.png" width="144" height="144" alt="Discard logo">
+  <h1>Discard</h1>
+  <p><strong>A focused desktop home for Discord Web.</strong></p>
+  <p>A native Windows shell built with Rust, Win32, and Microsoft Edge WebView2.</p>
+  <p>
+    <a href="https://github.com/Zvenytoh/discard/actions/workflows/windows.yml"><img src="https://github.com/Zvenytoh/discard/actions/workflows/windows.yml/badge.svg?branch=main" alt="Windows build status"></a>
+    <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4" alt="Windows 10 and 11">
+    <img src="https://img.shields.io/badge/Built_with-Rust-DEA584" alt="Built with Rust">
+    <img src="https://img.shields.io/badge/Engine-WebView2-FF573D" alt="Microsoft Edge WebView2">
+  </p>
+  <p>
+    <a href="#overview">Overview</a> ·
+    <a href="#getting-started">Getting started</a> ·
+    <a href="#development">Development</a> ·
+    <a href="https://github.com/Zvenytoh/discard/issues">Report an issue</a>
+  </p>
+</div>
 
-Un client Windows léger pour **Discord Web**, avec un hôte **Rust + Win32** et
-**Microsoft Edge WebView2**. Le moteur WebView2 Evergreen installé sur Windows est
-réutilisé. Discard est un projet indépendant, non affilié à Discord.
+---
 
-## Base actuelle
+## Overview
 
-- Fenêtre native redimensionnable avec prise en charge du DPI.
-- Chargement de `https://discord.com/app` et session persistante dans
-  `%LOCALAPPDATA%\Discard\WebView2`.
-- Boucle Win32 bloquante, initialisation WebView2 asynchrone et fermeture explicite.
-- Navigation principale limitée à HTTPS sur `discord.com`, sans bridge natif.
-- Nouvelles fenêtres et téléchargements bloqués dans cette première base.
-- Formatage, Clippy et compilation Windows dans GitHub Actions.
+Discard brings the official Discord web experience into a dedicated native
+Windows window. Rust owns the application lifecycle, Win32 provides the desktop
+window, and WebView2 renders the site using the installed Evergreen Runtime.
 
-Cette première version héberge le site officiel. Elle ne fournit pas de serveur
-de messagerie indépendant, de client Discord réécrit, d'installation automatique
-ou de mise à jour intégrée. Les liens externes sont bloqués pour le moment.
-Les ressources et sous-frames du site sont gérées par WebView2.
+The host uses an event-driven message loop and shares the system WebView2
+installation instead of bundling another browser engine. The goal is a small,
+maintainable desktop shell; memory and CPU improvements have not yet been measured.
 
-## Prérequis
+### What is included
 
-- Windows 10/11 x64 et [WebView2 Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
-- [Rust stable](https://rustup.rs/) avec `rustfmt` et `clippy`.
-- Pour la cible MSVC recommandée : Visual Studio Build Tools, charge de travail
-  **Desktop development with C++**, et Windows SDK.
+- **Native window** — standard Windows controls, resizing, and per-monitor DPI handling.
+- **Persistent sign-in** — a dedicated local WebView2 profile reused between launches.
+- **Focused navigation** — main-frame navigation restricted to HTTPS on `discord.com`.
+- **Isolated web content** — native host objects and web-to-native messages disabled.
+- **Explicit lifecycle** — asynchronous WebView2 startup and controller cleanup on exit.
+- **Windows CI** — formatting, Clippy, and a release build checked by GitHub Actions.
+
+### Project status
+
+**Early development · v0.1.0.** The native host foundation is in place. Discord
+provides the accounts, conversations, and media through its website.
+
+External links, pop-up windows, and downloads are currently blocked. Voice,
+camera, notifications, and screen sharing still need runtime validation. An
+installer, system tray integration, and automatic updates are not included yet.
+
+## Getting started
+
+### Requirements
+
+- **Windows 10 or 11, x64.**
+- **[Microsoft Edge WebView2 Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/).**
+- **[Rust stable](https://rustup.rs/)** with the `rustfmt` and `clippy` components.
+- **Visual Studio Build Tools** with **Desktop development with C++** and a Windows
+  SDK for the recommended MSVC toolchain.
+
+### Build from source
 
 ```powershell
-cargo run
+git clone https://github.com/Zvenytoh/discard.git
+cd discard
+cargo run --locked
 ```
 
-Fermer la fenêtre quitte l'application. Les données de session restent sur disque.
-Les autorisations du site suivent les mécanismes de WebView2 ; voix, caméra,
-notifications et partage d'écran nécessitent une validation réelle sur Windows.
-Aucun gain mémoire ou CPU n'est encore mesuré.
+For an optimized executable:
 
-## Développement
+```powershell
+cargo build --release --locked
+.\target\release\discard.exe
+```
+
+Successful [Windows workflow runs](https://github.com/Zvenytoh/discard/actions/workflows/windows.yml)
+also provide a `discard-windows-x64` build artifact. GitHub sign-in may be required
+to download it. These are development builds, not installer releases.
+
+### Session data
+
+Discard stores its WebView2 profile in:
+
+```text
+%LOCALAPPDATA%\Discard\WebView2
+```
+
+Closing the window exits the application and keeps your session data. Treat this
+directory as private: it can contain cookies and other account session information.
+
+## Development
 
 ```powershell
 cargo fmt --all -- --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo build --release --locked
-# Ou :
-.\scripts\dev.ps1 check
-.\scripts\dev.ps1 build
 ```
 
-Le binaire MSVC est `target\release\discard.exe`. Avec la cible GNU, livrer aussi
-`WebView2Loader.dll` à côté du binaire ; `scripts/dev.ps1 build` le copie.
-Les tests unitaires/fonctionnels sont exécutés uniquement sur demande explicite.
+The PowerShell helper provides the same checks and handles copying the WebView2
+loader for x64 GNU builds:
 
-Les règles de contribution sont dans [AGENTS.md](AGENTS.md), l'organisation dans
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), et les outils/skills dans
-[docs/TOOLING.md](docs/TOOLING.md).
+```powershell
+.\scripts\dev.ps1 check
+.\scripts\dev.ps1 build
+.\scripts\dev.ps1 run
+```
+
+MSVC builds produce `target\release\discard.exe`. GNU builds also require
+`WebView2Loader.dll` beside the executable. Unit and functional tests are run only
+when explicitly requested; the current CI performs static checks and compilation.
+
+## Architecture
+
+| Component | Responsibility |
+| :--- | :--- |
+| `src/main.rs` | Application entry point and fatal errors |
+| `src/navigation.rs` | HTTPS URL allowlist |
+| `src/native/mod.rs` | Win32 window, COM apartment, message loop, and shutdown |
+| `src/native/webview.rs` | WebView2 initialization and navigation events |
+
+See [Architecture](docs/ARCHITECTURE.md) for ownership and security boundaries,
+[Tooling](docs/TOOLING.md) for the development tools and skills, and
+[Project instructions](AGENTS.md) for contribution rules.
+
+---
+
+Discard is an independent project and is not affiliated with or endorsed by
+Discord. Discord and Microsoft Edge WebView2 belong to their respective owners.
