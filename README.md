@@ -4,6 +4,9 @@
   <p><strong>A focused desktop home for Discord Web.</strong></p>
   <p>A native Windows shell built with Rust, Win32, and Microsoft Edge WebView2.</p>
   <p>
+    <a href="https://github.com/Zvenytoh/discard/releases/latest/download/Discard-Setup.exe"><img src="https://img.shields.io/badge/Download_for_Windows-Discard_Setup-FF573D?style=for-the-badge" alt="Download Discard Setup for Windows"></a>
+  </p>
+  <p>
     <a href="https://github.com/Zvenytoh/discard/actions/workflows/windows.yml"><img src="https://github.com/Zvenytoh/discard/actions/workflows/windows.yml/badge.svg?branch=main" alt="Windows build status"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4" alt="Windows 10 and 11">
     <img src="https://img.shields.io/badge/Built_with-Rust-DEA584" alt="Built with Rust">
@@ -37,6 +40,7 @@ maintainable desktop shell; memory and CPU improvements have not yet been measur
 - **Isolated web content** — native host objects and web-to-native messages disabled.
 - **Explicit lifecycle** — asynchronous WebView2 startup and controller cleanup on exit.
 - **Windows CI** — formatting, Clippy, and a release build checked by GitHub Actions.
+- **Windows installer** — per-user installation, shortcuts, WebView2 setup, and uninstall support.
 
 ### Project status
 
@@ -44,12 +48,31 @@ maintainable desktop shell; memory and CPU improvements have not yet been measur
 provides the accounts, conversations, and media through its website.
 
 External links, pop-up windows, and downloads are currently blocked. Voice,
-camera, notifications, and screen sharing still need runtime validation. An
-installer, system tray integration, and automatic updates are not included yet.
+camera, notifications, and screen sharing still need runtime validation. System
+tray integration and automatic application updates are not included yet.
 
 ## Getting started
 
-### Requirements
+### Install on Windows
+
+1. Download **[Discard-Setup.exe](https://github.com/Zvenytoh/discard/releases/latest/download/Discard-Setup.exe)** from the latest release.
+2. Run the installer and follow the setup wizard.
+3. Open **Discard** from the Start menu.
+
+Setup installs for your Windows account without requesting administrator rights.
+A desktop shortcut is optional. If WebView2 is missing, setup installs Microsoft's
+Evergreen Runtime; an Internet connection is required for that step. Windows 10/11
+x64 is supported. The executable is currently unsigned, so Windows may display
+an unknown-publisher warning.
+
+Uninstall through **Windows Settings → Apps**. Your Discord session profile is
+kept separately and is preserved when uninstalling or installing a newer version.
+
+Each [release](https://github.com/Zvenytoh/discard/releases) also includes a portable
+`Discard.exe` and `SHA256SUMS.txt`. The portable build requires WebView2 to be
+installed already.
+
+### Build requirements
 
 - **Windows 10 or 11, x64.**
 - **[Microsoft Edge WebView2 Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/).**
@@ -73,8 +96,8 @@ cargo build --release --locked
 ```
 
 Successful [Windows workflow runs](https://github.com/Zvenytoh/discard/actions/workflows/windows.yml)
-also provide a `discard-windows-x64` build artifact. GitHub sign-in may be required
-to download it. These are development builds, not installer releases.
+also provide a `discard-windows-x64` artifact containing the installer, executable,
+and checksums. GitHub sign-in may be required to download workflow artifacts.
 
 ### Session data
 
@@ -107,6 +130,31 @@ loader for x64 GNU builds:
 MSVC builds produce `target\release\discard.exe`. GNU builds also require
 `WebView2Loader.dll` beside the executable. Unit and functional tests are run only
 when explicitly requested; the current CI performs static checks and compilation.
+
+### Packaging and releases
+
+Install **Inno Setup 6.3 or later**, build the release executable, then run:
+
+```powershell
+.\scripts\build-installer.ps1
+```
+
+The package appears in `target\distribution`. The build script verifies the
+Microsoft WebView2 bootstrapper's Authenticode signature before bundling it.
+MSVC builds link the Visual C++ runtime statically.
+
+To publish a release, update the package version in `Cargo.toml` and `Cargo.lock`,
+commit it, and push the matching tag:
+
+```powershell
+git tag -a v0.1.0 -m "Discard v0.1.0"
+git push origin v0.1.0
+```
+
+Use a new version/tag for each subsequent release. CI verifies that the tag
+matches the package version, runs the checks, builds the installer, and publishes
+the three release assets. Failed checks prevent release publication. The SHA256
+file can be compared with `Get-FileHash .\Discard-Setup.exe -Algorithm SHA256`.
 
 ## Architecture
 

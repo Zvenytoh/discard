@@ -110,6 +110,30 @@ failure and never restart the browser automatically.
 - User data stays in `%LOCALAPPDATA%\Discard\WebView2`. Never rename, clear,
   export, or log account/session data as part of an architecture change.
 
+## Packaging and releases
+
+Packaging is a build/distribution concern outside the runtime core. The Inno Setup
+recipe in `installer/Discard.iss` installs into the current user's Programs folder,
+adds shortcuts, and registers uninstallation. It leaves the separate WebView2
+profile intact. The same application ID and destination are reused for upgrades.
+
+`scripts/build-installer.ps1` requires a completed release build and validates any
+release tag against the package version. It downloads the Microsoft Evergreen
+bootstrapper, requires a valid Microsoft Authenticode signature, and compiles the
+installer. Setup checks the documented HKCU/HKLM registry locations and runs the
+bootstrapper only when the Runtime is missing. Internet access is then required.
+
+The Windows workflow builds the installer on branch/PR runs. A `v*` tag also
+enables a separate publication job after the build passes. Only that job receives
+repository contents write permission. It publishes `Discard-Setup.exe`,
+`Discard.exe`, and SHA256 checksums. The MSVC target links the C runtime statically;
+GNU packaging additionally carries `WebView2Loader.dll` when present.
+
+The installer uses the brand icon for setup, shortcuts, and the uninstall entry.
+The application executable itself still uses the system icon. Binaries are unsigned;
+no signing certificate or automatic application update mechanism is configured.
+Installer compilation is distinct from installation/uninstallation runtime testing.
+
 ## Rust conventions and extension rules
 
 Keep `unsafe` within `native/`, with local safety comments describing ownership,
