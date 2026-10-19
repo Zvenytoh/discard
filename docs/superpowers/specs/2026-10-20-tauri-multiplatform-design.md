@@ -1,6 +1,7 @@
 # Discard — Tauri desktop migration design
 
-Status: proposed for review; no application migration implemented.
+Status: approved for execution; implementation is on `codex/tauri-multiplatform`.
+Native runtime/media acceptance remains pending as recorded in `docs/validation/`.
 
 ## Goal and scope
 

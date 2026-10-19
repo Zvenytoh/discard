@@ -65,7 +65,7 @@ pub(super) fn identity() {
     }
 }
 
-fn initialize(controller: ICoreWebView2Controller) -> Result<()> {
+fn initialize(controller: ICoreWebView2Controller, hwnd: HWND) -> Result<()> {
     // SAFETY: Tauri invokes with_webview on the controller's owning UI STA.
     let state = unsafe {
         let web = controller.CoreWebView2()?;
@@ -90,8 +90,6 @@ fn initialize(controller: ICoreWebView2Controller) -> Result<()> {
             }
         });
         let memory = web.cast::<ICoreWebView2_19>().ok();
-        let mut hwnd = HWND::default();
-        controller.ParentWindow(&mut hwnd)?;
         Background {
             hwnd,
             controller,
@@ -183,8 +181,11 @@ fn apply() {
 
 pub(super) fn attach(window: &tauri::WebviewWindow) -> tauri::Result<()> {
     let app = window.app_handle().clone();
+    // WebView2's ParentWindow is Wry's child container, not the native top-level.
+    let hwnd = window.hwnd()?.0 as usize;
     window.with_webview(move |webview| {
-        if let Err(error) = initialize(webview.controller()) {
+        let hwnd = HWND(hwnd as *mut std::ffi::c_void);
+        if let Err(error) = initialize(webview.controller(), hwnd) {
             super::show_error(&format!("Could not secure Discord's WebView: {error}"));
             app.exit(1);
         }

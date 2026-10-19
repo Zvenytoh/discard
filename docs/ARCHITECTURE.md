@@ -72,7 +72,9 @@ optimizations must not turn into fatal startup failures.
 - Configure no application invoke handler, privileged remote capability grants
   or plugins. `withGlobalTauri` is false. Tauri still supplies framework-internal
   scripts and IPC; absence of a global object alone is not isolation proof.
-- Keep TLS, origin checks, sandboxing and engine permission behavior intact.
+- Keep TLS, origin checks and sandboxing intact. Explicitly return the engine's
+  default permission response; this requests WKWebView's origin prompt instead
+  of Wry's no-handler media auto-grant. Other engines keep their default decision.
   macOS bundles declare microphone/camera purposes and appropriate capture
   entitlements; declarations do not grant permission or establish media support.
 
@@ -88,8 +90,10 @@ review from runtime probes, login, notifications and capture behavior.
 | macOS | WKWebView store ID `[213,50,140,206,145,20,70,192,190,120,110,183,97,61,185,142]` |
 
 Keep bundle identifier `com.zvenytoh.discard` stable. Never read, export, clear,
-rename or copy cookies during migration. Directory/startup errors return to the
-presentation boundary; do not recover by silently creating an alternative profile.
+rename or copy cookies during migration. Handle directory/window errors inside
+the Tauri setup callback, report them and request exit; returning setup Err would
+cause Tauri to panic. Windows presents a dialog, other platforms currently log
+to stderr. Never silently create an alternative profile after a failure.
 Windows uses the existing location, but sign-in preservation across the upgrade
 still needs a user-controlled acceptance check. Profiles are not shared across OSes.
 

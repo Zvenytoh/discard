@@ -12,9 +12,8 @@ pub(crate) fn configure(
     windows::identity();
     #[cfg(target_os = "macos")]
     let builder = macos::configure(builder);
-    #[cfg(windows)]
-    let builder = builder.disable_drag_drop_handler();
-    builder
+    // Native drag/drop events are unused; let Discord receive HTML file drops.
+    builder.disable_drag_drop_handler()
 }
 
 pub(crate) fn attach(_window: &tauri::WebviewWindow) -> tauri::Result<()> {
@@ -39,4 +38,11 @@ pub(crate) fn show_error(message: &str) {
             );
         }
     }
+}
+
+pub(crate) fn show_startup_error(error: &dyn std::fmt::Display) {
+    show_error(&format!(
+        "Discard could not start. Close other Discard windows and try again.\n\
+         Your session data has been preserved.\n\n{error}"
+    ));
 }

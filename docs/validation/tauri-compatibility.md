@@ -74,7 +74,21 @@ must be performed by the user; no messages or calls are sent by automation.
 - Baseline `cargo build --release --locked`: passed (GNU).
 - Initial Tauri `cargo build --release --locked`: passed (GNU).
 - Initial `cargo fmt --all -- --check`: passed.
-- Final integrated checks and runtime evidence: recorded as execution progresses.
+- Integrated `cargo clippy --locked --all-targets -- -D warnings`: passed (GNU).
+- `cargo tauri build --no-bundle -- --locked`: passed (GNU).
+- `scripts/dev.ps1 build`: passed, including GNU loader copy.
+- YAML, JSON and macOS plist parsing: passed. PowerShell AST and Bash syntax
+  checks passed for helper scripts and workflow script blocks.
+- Final review identified and corrected child-versus-top-level HWND handling,
+  Tauri setup-error propagation and native interception of HTML file drops.
+  A connected dependency-source check also found Wry's default macOS media
+  auto-grant; an explicit Default response now requests normal origin prompting.
+- Computer Use was stopped by the user with Escape during window selection.
+  No further UI actions were taken. Launch/rendering, titlebar appearance and
+  minimize/restore acceptance are not established by that attempt.
+- Post-review `cargo fmt --all -- --check`, integrated Clippy and
+  `scripts/dev.ps1 build`: passed (GNU; final optimized build 1m19s).
+- Hosted MSVC/macOS/Linux native jobs: pending; no successful hosted run claimed.
 
 ## Release blockers
 
