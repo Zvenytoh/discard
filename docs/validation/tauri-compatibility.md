@@ -42,6 +42,12 @@ browser handling, including Discord CDNs. No wildcard origin matching is added.
 Unit/functional test suites were not run, in accordance with AGENTS.md. Manual
 navigation/remote-frame adversarial probes remain unverified unless recorded below.
 
+Task 2 source review found no need to change the existing URL policy. The Tauri
+callbacks retain its exact rule, and generated capabilities are empty. The
+Windows adapter fails closed if disabling native host objects/web messages fails;
+background optimization failures alone remain nonfatal. Review does not establish
+the outcome of a live remote-frame attack probe.
+
 ## Native runtime matrix
 
 | Case | Windows | macOS | Linux |
