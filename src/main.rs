@@ -1,21 +1,20 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![deny(unsafe_op_in_unsafe_fn)]
 
-#[cfg(windows)]
-mod native;
-#[cfg(windows)]
+mod app;
 mod navigation;
+mod platform;
+mod profile;
 
-#[cfg(windows)]
 fn main() -> std::process::ExitCode {
-    match native::run() {
+    match app::run() {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(error) => {
-            native::show_error(&error);
+            platform::show_error(&format!(
+                "Discard could not start. Close other Discard windows and try again.\n\
+                 Your session data has been preserved.\n\n{error}"
+            ));
             std::process::ExitCode::FAILURE
         }
     }
 }
-
-#[cfg(not(windows))]
-compile_error!("Discard requires Windows, Win32 and Microsoft Edge WebView2.");

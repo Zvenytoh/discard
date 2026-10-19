@@ -1,6 +1,7 @@
 /target/
 /.tools/
 /graphify-out/
+/gen/
 .env
 .env.*
 !.env.example
