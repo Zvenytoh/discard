@@ -11,6 +11,16 @@ Read `~/.codex/RTK.md` when present; its location is machine-specific.
 - Do not modify unrelated code or another repository.
 - Target Windows, native Win32 and Microsoft Edge WebView2.
 
+## Architecture boundaries
+
+- Follow `docs/ARCHITECTURE.md`; distinguish implemented structure from proposed design.
+- Keep host policy pure and independent of Win32, COM, WebView2 and filesystem effects.
+- Native adapters depend on policy, never the reverse. Do not pass native handles into policy APIs.
+- Keep composition and resource ownership explicit within the native boundary.
+- Prefer one crate, concrete types and narrow module visibility. Add traits, layers or crates only for a demonstrated need.
+- Preserve structured error sources when introducing distinct recovery paths; format errors at presentation boundaries.
+- Keep architectural refactoring separate from feature changes and dependency updates.
+
 ## Context efficiency
 
 - Search relevant symbols with `rg` before reading whole files.

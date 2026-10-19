@@ -110,6 +110,12 @@ when explicitly requested; the current CI performs static checks and compilation
 
 ## Architecture
 
+The design follows a pure-policy core with native adapters: URL rules remain
+independent of Win32 and WebView2, while the host owns platform effects and
+resource lifetimes. The current implementation uses one binary crate.
+
+Current source layout:
+
 | Component | Responsibility |
 | :--- | :--- |
 | `src/main.rs` | Application entry point and fatal errors |
@@ -119,7 +125,9 @@ when explicitly requested; the current CI performs static checks and compilation
 
 See [Architecture](docs/ARCHITECTURE.md) for ownership and security boundaries,
 [Tooling](docs/TOOLING.md) for the development tools and skills, and
-[Project instructions](AGENTS.md) for contribution rules.
+[Project instructions](AGENTS.md) for contribution rules. The proposed next module
+boundaries and their rationale are documented in the
+[Clean architecture design](docs/superpowers/specs/2026-10-19-clean-architecture-design.md).
 
 ---
 
