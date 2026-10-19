@@ -12,7 +12,7 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
       - name: Install Rust components
         run: rustup component add rustfmt clippy
       - name: Format
@@ -21,7 +21,7 @@ jobs:
         run: cargo clippy --locked --all-targets -- -D warnings
       - name: Release build
         run: cargo build --release --locked
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: discard-windows-x64
           path: target/release/discard.exe
