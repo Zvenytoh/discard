@@ -1,5 +1,6 @@
 param([ValidateSet('check', 'build', 'fmt', 'clippy', 'run')][string]$Task = 'check')
 $ErrorActionPreference = 'Stop'
+# Install the reviewed CLI with: cargo install tauri-cli --version 2.12.3 --locked
 function Copy-WebViewLoader([string]$Profile) {
     $hostInfo = & rustc -vV
     if ($LASTEXITCODE -ne 0) { throw 'Could not determine the Rust host.' }
@@ -13,6 +14,12 @@ function Copy-WebViewLoader([string]$Profile) {
 
 Push-Location (Split-Path $PSScriptRoot -Parent)
 try {
+    if ($Task -in @('build', 'run')) {
+        $cli = & cargo tauri --version
+        if ($LASTEXITCODE -ne 0 -or $cli.Trim() -ne 'tauri-cli 2.12.3') {
+            throw 'Install the pinned CLI: cargo install tauri-cli --version 2.12.3 --locked'
+        }
+    }
     switch ($Task) {
         check {
             & cargo fmt --all -- --check
@@ -23,15 +30,16 @@ try {
         fmt { & cargo fmt --all -- --check }
         clippy { & cargo clippy --locked --all-targets -- -D warnings }
         build {
-            & cargo build --release --locked
+            & cargo tauri build --no-bundle -- --locked
             if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
             Copy-WebViewLoader release
         }
         run {
+            # GNU needs its loader beside the executable before Tauri launches it.
             & cargo build --locked
             if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
             Copy-WebViewLoader debug
-            & './target/debug/discard.exe'
+            & cargo tauri dev -- --locked
         }
     }
     if ($LASTEXITCODE -ne 0) { throw "Cargo failed ($LASTEXITCODE)." }

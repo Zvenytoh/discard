@@ -9,7 +9,7 @@ if ($ReleaseTag -and $ReleaseTag -cne "v$version") {
     throw "Release tag '$ReleaseTag' must match Cargo.toml version 'v$version'."
 }
 if (-not (Test-Path (Join-Path $root 'target/release/discard.exe'))) {
-    throw 'Build the release executable before packaging.'
+    throw 'Build first: cargo tauri build --no-bundle -- --locked'
 }
 
 $compiler = Get-ChildItem -Path @(
