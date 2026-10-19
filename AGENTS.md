@@ -5,50 +5,47 @@ Read `~/.codex/RTK.md` when present; its location is machine-specific.
 
 ## Principles
 
-- Prefer simple, maintainable, idiomatic Rust.
-- Avoid unnecessary abstractions, dependencies and files.
-- Follow existing conventions and make minimal, targeted changes.
-- Do not modify unrelated code or another repository.
-- Target Windows, native Win32 and Microsoft Edge WebView2.
+- Prefer simple, maintainable, idiomatic Rust and minimal, targeted changes.
+- Avoid unnecessary abstractions, dependencies and files; do not modify unrelated code or another repository.
+- Keep one root Rust binary crate and one Tauri external-content window. No npm/frontend toolchain.
+- Target Windows 10/11 x64, macOS 14+ Intel/Apple Silicon, and Ubuntu 22.04+ x64. Treat unvalidated targets as experimental.
 
 ## Architecture boundaries
 
-- Follow `docs/ARCHITECTURE.md`; distinguish implemented structure from proposed design.
-- Keep host policy pure and independent of Win32, COM, WebView2 and filesystem effects.
-- Native adapters depend on policy, never the reverse. Do not pass native handles into policy APIs.
-- Keep composition and resource ownership explicit within the native boundary.
-- Prefer one crate, concrete types and narrow module visibility. Add traits, layers or crates only for a demonstrated need.
-- Preserve structured error sources when introducing distinct recovery paths; format errors at presentation boundaries.
-- Keep architectural refactoring separate from feature changes and dependency updates.
+- Follow the implemented structure in `docs/ARCHITECTURE.md`; historical proposals are not current code.
+- Keep navigation policy pure, independent of Tauri, native engines and filesystem effects.
+- Keep lifecycle composition in `src/app.rs`, path resolution in `src/profile.rs`, and native effects inside `src/platform/`.
+- Prefer concrete types and narrow visibility. Add traits, layers or crates only for a demonstrated need.
+- Preserve structured error sources until presentation; never silently replace a failed profile with a fresh one.
+- Keep architectural refactoring separate from unrelated features and dependency changes.
 
 ## Context efficiency
 
-- Search relevant symbols with `rg` before reading whole files.
-- Prefer scoped searches and concise output; do not repeatedly read unchanged files.
-- Use RTK for supported Git, Cargo and search commands when available. Fall back to the original command if unavailable; never hide failures.
-- Use the project Graphify skill for architecture questions when `graphify-out/graph.json` exists. Keep generated output local and rebuild only when needed.
-- Use Context7 only when current external documentation is needed; use official documentation if the MCP is unavailable.
+- Search relevant symbols with `rg` before reading whole files; use scoped output and avoid rereading unchanged files.
+- Use RTK for supported Git/Cargo/search commands when available; fall back normally without hiding failures.
+- Use the project Graphify skill for architecture questions when `graphify-out/graph.json` exists. Keep generated output local.
+- Use Context7 when current external documentation is needed; fall back to official documentation.
 - Use ast-grep for structural searches and refactoring when appropriate.
 
 ## Development
 
-- Use global Ponytail for simple, minimal implementations.
-- Invoke the relevant Superpowers planning/debugging skill for complex work. User instructions take precedence over skill defaults.
-- Do not use subagents unless the user explicitly asks for them.
-- Keep `unsafe` inside `src/native/`; document FFI invariants.
-- Keep COM and WebView2 on the owning STA thread. Never hold a `RefCell` borrow across a native call that can reenter.
-- Use the blocking Win32 message loop; avoid polling and permanent page scripts.
-- Preserve navigation allowlists, WebView2 security defaults and existing user data.
-- Never expose native host objects, credentials or privileged IPC to remote pages.
+- Use Ponytail for minimal implementations and relevant Superpowers skills for complex planning/debugging.
+- User instructions override skill defaults. Subagents need user authorization; the current migration permits simple peripheral tasks. Keep core migration and final integration with the primary agent.
+- Localize application `unsafe` to `src/platform/` and document thread affinity, ownership and pointer invariants.
+- Keep WebView2 COM operations on the owning UI STA thread via Tauri's native access. End interior borrows before potentially reentrant native calls.
+- Use native events and Tauri's lifecycle. Add no polling, permanent app page scripts, forced suspension, cache clearing or GPU-disable flags.
+- Preserve exact navigation rules, engine security defaults and existing user data.
+- Grant no privileged remote capabilities, native commands or plugins to Discord. Framework-internal JS/IPC exists; do not describe the framework as injection-free.
+- Keep Windows profile `%LOCALAPPDATA%\Discard\WebView2`, Inno app identity and `Zvenytoh.Discard` AppUserModelID stable.
 - Do not run unit or functional tests unless the user explicitly requests them. When requested, run focused tests before full suites.
-- For Rust changes, run formatting, Clippy and a build when the toolchain is available. CI runs these checks without tests.
-- Use Semgrep for relevant security reviews, not automatically on every edit.
-- Select specialized OpenAI skills only when relevant to the requested task.
+- For Rust changes run formatting, Clippy and a release build when available. CI runs these checks without unit/functional suites.
+- Use Semgrep for relevant security reviews and specialized skills only when useful.
 
 ## Safety and reporting
 
-- Never suppress errors to make validation pass or skip required validation silently.
-- Ask before destructive or irreversible operations; ordinary local edits and checks are authorized by the task.
-- Never commit tokens, cookies, local profiles, tool binaries or generated graphs.
+- Never suppress errors or silently skip required validation.
+- Ask before destructive or irreversible operations. Ordinary task-scoped local edits and checks are authorized.
+- Never commit tokens, cookies, local profiles, signing credentials, tool binaries or generated graphs.
+- Keep unsigned macOS artifacts explicitly experimental and out of normal public release assets.
 - Summarize changes, exact checks, remaining issues and limitations concisely.
-- Do not claim runtime, login, voice, video or performance validation unless performed.
+- Never infer runtime, login, media, install/upgrade or performance success from compilation. Record unavailable cases explicitly.

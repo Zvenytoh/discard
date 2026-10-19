@@ -2,182 +2,184 @@
   <img src="assets/logo.png" width="144" height="144" alt="Discard logo">
   <h1>Discard</h1>
   <p><strong>A focused desktop home for Discord Web.</strong></p>
-  <p>A native Windows shell built with Rust, Win32, and Microsoft Edge WebView2.</p>
+  <p>Built with Rust and Tauri. Powered by your platform's webview.</p>
   <p>
-    <a href="https://github.com/Zvenytoh/discard/releases/latest/download/Discard-Setup.exe"><img src="https://img.shields.io/badge/Download_for_Windows-Discard_Setup-FF573D?style=for-the-badge" alt="Download Discard Setup for Windows"></a>
-  </p>
-  <p>
-    <a href="https://github.com/Zvenytoh/discard/actions/workflows/windows.yml"><img src="https://github.com/Zvenytoh/discard/actions/workflows/windows.yml/badge.svg?branch=main" alt="Windows build status"></a>
-    <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4" alt="Windows 10 and 11">
+    <a href="https://github.com/Zvenytoh/discard/actions/workflows/desktop.yml"><img src="https://github.com/Zvenytoh/discard/actions/workflows/desktop.yml/badge.svg?branch=main" alt="Desktop build status"></a>
     <img src="https://img.shields.io/badge/Built_with-Rust-DEA584" alt="Built with Rust">
-    <img src="https://img.shields.io/badge/Engine-WebView2-FF573D" alt="Microsoft Edge WebView2">
+    <img src="https://img.shields.io/badge/Desktop-Tauri_2-24C8D8" alt="Tauri 2">
   </p>
-  <p>
-    <a href="#overview">Overview</a> ·
-    <a href="#getting-started">Getting started</a> ·
-    <a href="#development">Development</a> ·
-    <a href="https://github.com/Zvenytoh/discard/issues">Report an issue</a>
-  </p>
+  <p><a href="#getting-started">Getting started</a> · <a href="#development">Development</a> · <a href="https://github.com/Zvenytoh/discard/issues">Report an issue</a></p>
 </div>
 
 ---
 
 ## Overview
 
-Discard brings the official Discord web experience into a dedicated native
-Windows window. Rust owns the application lifecycle, Win32 provides the desktop
-window, and WebView2 renders the site using the installed Evergreen Runtime.
+Discard opens the official Discord website in one dedicated native window.
+The application uses a single Rust crate and Tauri's desktop lifecycle, without
+React, npm, a local frontend server, or a bundled Chromium distribution.
+Discord provides accounts, conversations, and media through its website.
 
-The host uses an event-driven message loop and shares the system WebView2
-installation instead of bundling another browser engine. The goal is a small,
-maintainable desktop shell; memory and CPU improvements have not yet been measured.
+**The source is a v0.2.0 migration candidate, not a published release.** The
+[existing v0.1.0 release](https://github.com/Zvenytoh/discard/releases/tag/v0.1.0)
+is the earlier Windows-only Win32/WebView2 application. Its installer does not
+contain this Tauri migration.
 
-### What is included
+| Candidate target | Engine | Packaging | Validation status |
+| :--- | :--- | :--- | :--- |
+| Windows 10/11 x64 | WebView2 Evergreen | Per-user Inno installer, portable EXE | Migration acceptance pending |
+| macOS 14+ Intel and Apple Silicon | WKWebView | Separate DMGs | Experimental; native runtime checks pending |
+| Ubuntu 22.04+ x64 | WebKitGTK 4.1 | DEB, AppImage | Experimental; native runtime checks pending |
 
-- **Native window** — standard Windows controls, resizing, and per-monitor DPI handling.
-- **Persistent sign-in** — a dedicated local WebView2 profile reused between launches.
-- **Focused navigation** — main-frame navigation restricted to HTTPS on `discord.com`.
-- **Isolated web content** — native host objects and web-to-native messages disabled.
-- **Explicit lifecycle** — asynchronous WebView2 startup and controller cleanup on exit.
-- **Windows CI** — formatting, Clippy, and a release build checked by GitHub Actions.
-- **Windows installer** — per-user installation, shortcuts, WebView2 setup, and uninstall support.
+Other Linux distributions are best effort. An AppImage does not supply every
+system codec or guarantee compatibility with every graphics stack.
 
-### Project status
+### What the candidate includes
 
-**Early development · v0.1.0.** The native host foundation is in place. Discord
-provides the accounts, conversations, and media through its website.
+- One native window with the coral Discard icon, dark appearance, and persistent
+  engine data. Closing the window exits the app, including on macOS.
+- Main-frame navigation restricted to HTTPS on the exact `discord.com` host,
+  port 443, without embedded credentials. Pop-ups and downloads are blocked.
+- No application-native commands, plugins, or capability grants for remote
+  content. Tauri still uses framework-internal scripts and IPC.
+- Event-driven Windows background handling: hide rendering when minimized and
+  request lower memory use while inactive, with normal memory priority for
+  playing audio and conservative fallbacks. The page is never forcibly suspended.
+- Native CI configuration for all four architecture targets, with formatting,
+  Clippy, release builds, and packaging.
 
-External links, pop-up windows, and downloads are currently blocked. Voice,
-camera, notifications, and screen sharing still need runtime validation. System
-tray integration and automatic application updates are not included yet.
+Voice, silent calls, video, notifications, screen sharing, session upgrades, and
+installation behavior need the checks recorded in the
+[compatibility report](docs/validation/tauri-compatibility.md). No CPU or memory
+saving is claimed before the
+[performance measurements](docs/validation/tauri-performance.md).
+Mobile, system tray integration, and automatic app updates are outside this release.
 
 ## Getting started
 
-### Install on Windows
+For the published Windows-only version, use the
+[v0.1.0 release page](https://github.com/Zvenytoh/discard/releases/tag/v0.1.0).
+To try the migration candidate, build this source or download an artifact from a
+successful [Desktop workflow run](https://github.com/Zvenytoh/discard/actions/workflows/desktop.yml).
+GitHub sign-in may be required for workflow artifacts; a workflow configuration
+alone does not mean the candidate packages have built successfully.
 
-1. Download **[Discard-Setup.exe](https://github.com/Zvenytoh/discard/releases/latest/download/Discard-Setup.exe)** from the latest release.
-2. Run the installer and follow the setup wizard.
-3. Open **Discard** from the Start menu.
+| CI artifact | Candidate files |
+| :--- | :--- |
+| `discard-windows-x64` | `Discard-Setup.exe`, `Discard.exe`, `SHA256SUMS.txt` |
+| `discard-linux-x64` | `Discard_0.2.0_linux-x64.deb`, `Discard_0.2.0_linux-x64.AppImage` |
+| `discard-macos-x64` | `Discard_0.2.0_macos-x64[-unsigned-experimental].dmg` |
+| `discard-macos-arm64` | `Discard_0.2.0_macos-arm64[-unsigned-experimental].dmg` |
 
-Setup installs for your Windows account without requesting administrator rights.
-A desktop shortcut is optional. If WebView2 is missing, setup installs Microsoft's
-Evergreen Runtime; an Internet connection is required for that step. Windows 10/11
-x64 is supported. The executable is currently unsigned, so Windows may display
-an unknown-publisher warning.
+The bracketed macOS suffix is present when signing credentials are unavailable.
+No signing certificate is currently configured for this project. Windows binaries
+are unsigned; macOS unsigned/ad-hoc packages are experimental CI artifacts and
+are excluded from public release assets. Normal macOS distribution requires
+Developer ID signing and notarization.
 
-Uninstall through **Windows Settings → Apps**. Your Discord session profile is
-kept separately and is preserved when uninstalling or installing a newer version.
+### Windows installation and session data
 
-Each [release](https://github.com/Zvenytoh/discard/releases) also includes a portable
-`Discard.exe` and `SHA256SUMS.txt`. The portable build requires WebView2 to be
-installed already.
+Setup installs into `%LOCALAPPDATA%\Programs\Discard` without administrator rights,
+with Start menu and optional desktop shortcuts. It retains the original Inno app
+identity for upgrades. If WebView2 is missing, setup installs Microsoft's signed
+Evergreen bootstrapper; that step needs an Internet connection. The portable
+executable requires an existing WebView2 runtime.
 
-### Build requirements
+The candidate explicitly reuses `%LOCALAPPDATA%\Discard\WebView2`. It does not
+copy or reset cookies. Actual v0.1.0-to-candidate sign-in preservation must still
+be checked with a user-controlled session. Uninstall leaves this profile intact.
+Do not run two versions against the profile simultaneously.
 
-- **Windows 10 or 11, x64.**
-- **[Microsoft Edge WebView2 Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/).**
-- **[Rust stable](https://rustup.rs/)** with the `rustfmt` and `clippy` components.
-- **Visual Studio Build Tools** with **Desktop development with C++** and a Windows
-  SDK for the recommended MSVC toolchain.
-
-### Build from source
-
-```powershell
-git clone https://github.com/Zvenytoh/discard.git
-cd discard
-cargo run --locked
-```
-
-For an optimized executable:
-
-```powershell
-cargo build --release --locked
-.\target\release\discard.exe
-```
-
-Successful [Windows workflow runs](https://github.com/Zvenytoh/discard/actions/workflows/windows.yml)
-also provide a `discard-windows-x64` artifact containing the installer, executable,
-and checksums. GitHub sign-in may be required to download workflow artifacts.
-
-### Session data
-
-Discard stores its WebView2 profile in:
-
-```text
-%LOCALAPPDATA%\Discard\WebView2
-```
-
-Closing the window exits the application and keeps your session data. Treat this
-directory as private: it can contain cookies and other account session information.
+Linux stores webview data under Tauri's app-local data directory for
+`com.zvenytoh.discard`, in `webview` (normally
+`$XDG_DATA_HOME/com.zvenytoh.discard/webview` or
+`~/.local/share/com.zvenytoh.discard/webview`). macOS uses a fixed persistent
+WKWebView data-store identifier. There is no cross-platform cookie migration.
+Treat engine data as private account/session information.
 
 ## Development
 
-```powershell
+### Requirements
+
+All targets need Rust stable with `rustfmt` and `clippy`. The reviewed versions
+are Tauri **2.12.4**, tauri-build **2.7.3**, and tauri-cli **2.12.3**; the resolved
+Rust dependencies are committed in `Cargo.lock`. Node and npm are unnecessary.
+
+- **Windows:** MSVC Rust, Visual Studio C++ Build Tools with Windows SDK, and
+  WebView2 Evergreen. MSVC is the shipped target.
+- **macOS:** macOS 14+ and Xcode command-line tools; build for the host architecture.
+- **Linux:** Ubuntu 22.04+ build tools and WebKitGTK 4.1 development packages.
+
+On Ubuntu:
+
+```sh
+sudo apt-get update
+sudo apt-get install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf libfuse2
+```
+
+Clone and install the pinned Cargo CLI:
+
+```sh
+git clone https://github.com/Zvenytoh/discard.git
+cd discard
+cargo install tauri-cli --version 2.12.3 --locked
+```
+
+Use `./scripts/dev.ps1 run` on Windows or `bash scripts/dev.sh run` on macOS/Linux.
+The helpers provide `check`, `fmt`, `clippy`, `build`, and `run` tasks and invoke
+Cargo from the repository root. `build` produces the optimized application
+without an installer. The Windows helper also copies the WebView2 loader for
+local x64 GNU builds; MSVC remains the distribution baseline.
+
+Required Rust checks:
+
+```sh
 cargo fmt --all -- --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo build --release --locked
 ```
 
-The PowerShell helper provides the same checks and handles copying the WebView2
-loader for x64 GNU builds:
-
-```powershell
-.\scripts\dev.ps1 check
-.\scripts\dev.ps1 build
-.\scripts\dev.ps1 run
-```
-
-MSVC builds produce `target\release\discard.exe`. GNU builds also require
-`WebView2Loader.dll` beside the executable. Unit and functional tests are run only
-when explicitly requested; the current CI performs static checks and compilation.
+Unit and functional tests run only on explicit request. CI performs the static
+checks and compilation above; compilation does not establish login or media support.
 
 ### Packaging and releases
 
-Install **Inno Setup 6.3 or later**, build the release executable, then run:
+Windows retains Inno Setup 6.3+:
 
 ```powershell
+.\scripts\dev.ps1 build
 .\scripts\build-installer.ps1
 ```
 
-The package appears in `target\distribution`. The build script verifies the
-Microsoft WebView2 bootstrapper's Authenticode signature before bundling it.
-MSVC builds link the Visual C++ runtime statically.
+The script verifies the Microsoft bootstrapper's Authenticode signature and
+writes packages to `target/distribution`. MSVC links the C runtime statically.
+On Linux use `cargo tauri build --bundles deb,appimage -- --locked`; on macOS
+use `cargo tauri build --bundles dmg -- --locked`. Native SDKs and packaging
+tools are required; macOS release signing also requires private CI credentials.
 
-To publish a release, update the package version in `Cargo.toml` and `Cargo.lock`,
-commit it, and push the matching tag:
-
-```powershell
-git tag -a v0.1.0 -m "Discard v0.1.0"
-git push origin v0.1.0
-```
-
-Use a new version/tag for each subsequent release. CI verifies that the tag
-matches the package version, runs the checks, builds the installer, and publishes
-the three release assets. Failed checks prevent release publication. The SHA256
-file can be compared with `Get-FileHash .\Discard-Setup.exe -Algorithm SHA256`.
+The Desktop workflow builds branch/PR artifacts for Windows x64, Linux x64,
+macOS x64, and macOS arm64. Only a matching `v<package-version>` tag enables its
+publication job, after every build succeeds. That job normalizes filenames,
+excludes unsigned macOS packages, and generates `SHA256SUMS.txt` across public
+assets. A branch run never publishes a release. Review the compatibility report
+and candidate artifacts before creating a release tag.
 
 ## Architecture
 
-The design follows a pure-policy core with native adapters: URL rules remain
-independent of Win32 and WebView2, while the host owns platform effects and
-resource lifetimes. The current implementation uses one binary crate.
-
-Current source layout:
-
 | Component | Responsibility |
 | :--- | :--- |
-| `src/main.rs` | Application entry point and fatal errors |
-| `src/navigation.rs` | HTTPS URL allowlist |
-| `src/native/mod.rs` | Win32 window, COM apartment, message loop, and shutdown |
-| `src/native/webview.rs` | WebView2 initialization and navigation events |
+| `src/main.rs` | Entry point and final failure reporting |
+| `src/app.rs` | Single Tauri window, web hooks, and exit lifecycle |
+| `src/navigation.rs` | Pure HTTPS URL allowlist |
+| `src/profile.rs` | Persistent platform data locations |
+| `src/platform/` | Native appearance, identity, and engine-specific background handling |
 
-See [Architecture](docs/ARCHITECTURE.md) for ownership and security boundaries,
-[Tooling](docs/TOOLING.md) for the development tools and skills, and
-[Project instructions](AGENTS.md) for contribution rules. The proposed next module
-boundaries and their rationale are documented in the
-[Clean architecture design](docs/superpowers/specs/2026-10-19-clean-architecture-design.md).
+See [Architecture](docs/ARCHITECTURE.md), [Tooling](docs/TOOLING.md), and
+[Project instructions](AGENTS.md). The
+[Tauri design](docs/superpowers/specs/2026-10-20-tauri-multiplatform-design.md)
+supersedes the earlier Windows-only module proposal.
 
 ---
 
-Discard is an independent project and is not affiliated with or endorsed by
-Discord. Discord and Microsoft Edge WebView2 belong to their respective owners.
+Discard is independent and is not affiliated with or endorsed by Discord.
+Discord, Tauri, and the platform web engines belong to their respective owners.

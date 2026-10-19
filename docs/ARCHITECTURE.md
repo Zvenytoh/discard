@@ -1,153 +1,153 @@
 # Architecture
 
-Discard is a native Windows host for the official Discord website. This document
-separates the current implementation from the proposed next structure.
+Discard is a single Rust binary crate hosting the official Discord website in
+one Tauri window. The v0.2.0 source replaces the old direct Win32 event loop;
+it remains a migration candidate until platform acceptance checks are recorded.
 
-## Architectural direction
+The [Tauri migration design](superpowers/specs/2026-10-20-tauri-multiplatform-design.md)
+supersedes the Windows-only native module extraction proposed in the
+[earlier clean architecture design](superpowers/specs/2026-10-19-clean-architecture-design.md).
+That historical proposal does not describe the current module layout.
 
-Apply Clean Architecture's dependency rule at module boundaries: navigation
-policy is independent of Windows, WebView2, the filesystem, and presentation.
-The native host supplies those effects and applies the policy.
+## Dependency boundaries
 
-Discord owns accounts, conversations, and media. The local core contains the
-host's actual rules; it does not reproduce Discord's server-side domain.
-A single binary crate is sufficient for the current scope.
+The dependency rule applies to real host policy: `navigation.rs` depends only on
+the URL parser. It imports no Tauri, OS, COM, filesystem or presentation types.
+Discord itself owns accounts, conversations and media; duplicating its domain in
+local service/repository layers would add no useful boundary.
 
-The full proposal, rationale, migration sequence, and acceptance criteria are in
-[Clean architecture design](superpowers/specs/2026-10-19-clean-architecture-design.md).
-Its proposed extraction has not been applied to the source files yet.
-
-## Current implementation
-
-| File | Current responsibilities |
+| Module or file | Responsibility |
 | :--- | :--- |
-| `src/main.rs` | Entry point, exit status, fatal error presentation through the native host |
-| `src/navigation.rs` | Home URL and pure HTTPS navigation policy |
-| `src/native/mod.rs` | Startup, local profile path, COM guard, state, window creation, message dispatch, shutdown |
-| `src/native/webview.rs` | Environment/controller creation, settings, and navigation/download events |
+| `src/main.rs` | Entry point, exit status and final error reporting |
+| `src/app.rs` | Tauri setup, one external window, security hooks and exit policy |
+| `src/navigation.rs` | Home URL and pure main-frame allowlist |
+| `src/profile.rs` | Explicit persistent engine-data locations |
+| `src/platform/mod.rs` | Narrow platform configuration/attachment dispatch and native error presentation |
+| `src/platform/windows.rs` | Windows identity, DWM appearance and event-driven WebView2 resource policy |
+| `src/platform/macos.rs` | WKWebView persistent store and background scheduling configuration |
+| `build.rs`, `tauri.conf.json` | Tauri build context, identity, icons and bundle metadata |
 
 ```mermaid
 flowchart LR
-    Main[main.rs] --> Native[native host]
-    Native --> WebView[WebView2 adapter]
-    WebView --> Policy[navigation policy]
-    Native --> Win32[Win32 and COM]
-    WebView --> COM[WebView2 COM interfaces]
+    Main[main.rs] --> App[app.rs]
+    App --> Policy[navigation.rs]
+    App --> Profile[profile.rs]
+    App --> Platform[platform adapters]
+    App --> Tauri[Tauri lifecycle]
+    Platform --> Native[OS and engine APIs]
     Policy --> URL[url parser]
 ```
 
-Arrows show source dependencies. The policy never imports the native host.
+There is no empty Linux adapter: Linux uses the supported Tauri engine defaults.
+There is no browser trait, workspace of extra crates, frontend tree or global
+service registry. Add a module only when it owns a concrete responsibility.
 
-## Proposed module structure
+## Lifecycle and ownership
 
-```text
-src/
-  main.rs                 Process entry and final reporting
-  navigation.rs           Pure host navigation rules
-  native/
-    mod.rs                Composition, UI state, startup and shutdown coordination
-    apartment.rs          COM apartment guard and balancing invariant
-    window.rs             Window creation, window procedure and Win32 presentation
-    webview.rs            WebView2 controller, configuration and callbacks
-```
+`app::run() -> tauri::Result<()>` configures Tauri and creates `main` from Rust
+setup. It loads `https://discord.com/app` directly at 1200×800 logical pixels,
+with native decorations, a dark theme and opaque `#1E1F22` background.
+`tauri.conf.json` declares no initial windows; it grants no remote capabilities.
+No frontend development server or application-authored page script is involved.
 
-`apartment.rs` and `window.rs` are proposed extractions. The native modules remain
-private and collaborate through narrowly scoped `pub(super)` methods. Platform
-composition stays inside `native/` so FFI remains localized. A separate
-application layer becomes useful only when platform-independent workflows emerge.
+`profile::directory(&tauri::AppHandle)` returns the platform's explicit data
+location before the window is built. `platform::configure(builder)` applies
+builder-only settings, and `platform::attach(&window)` adds native behavior to the
+constructed window. Native state stays private to the adapter. Closing `main`
+requests application exit explicitly, including on macOS.
 
-## Ownership and threading
+Tauri/Wry owns the platform event loop and engine lifecycle. Windows COM access
+must remain on the owning UI STA thread through Tauri's native webview callback.
+Do not retain borrowed engine pointers, hold an interior borrow across reentrant
+native operations, or introduce callback ownership cycles. Optional resource
+optimizations must not turn into fatal startup failures.
 
-The UI thread owns the window and COM interfaces. COM initialization is balanced
-by a guard after native state and controller references have been released.
-Microsoft requires WebView2 operations and callbacks to use the owning UI STA
-thread with a working message pump.
-[WebView2 threading model](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/threading-model).
+## Remote-content boundary
 
-Use ordinary ownership first. `Rc` is appropriate for this thread's callback
-coordination; `RefCell` is limited to fields that actually need interior mutation.
-Clone a COM reference or take an owned value, end the borrow, then call native
-code. No `RefCell` guard may remain live across a potentially reentrant FFI call.
-Rust checks these borrows at runtime, and violations panic.
-[Rust Book: interior mutability](https://doc.rust-lang.org/book/ch15-05-interior-mutability.html).
+- Parse main-frame URLs with `url`: require HTTPS, exact `discord.com`, effective
+  port 443, and empty username/password. Prefix matching is insufficient.
+- Deny new windows and requested downloads. External-link opening is not implemented.
+- Main-frame navigation policy is not a subresource firewall. Discord's CDN and
+  engine-managed requests retain normal browser security behavior.
+- Configure no application invoke handler, privileged remote capability grants
+  or plugins. `withGlobalTauri` is false. Tauri still supplies framework-internal
+  scripts and IPC; absence of a global object alone is not isolation proof.
+- Keep TLS, origin checks, sandboxing and engine permission behavior intact.
+  macOS bundles declare microphone/camera purposes and appropriate capture
+  entitlements; declarations do not grant permission or establish media support.
 
-The private thread-local slot connects Win32/COM callbacks to current UI state.
-It must not become a registry used by policy or future background workers.
-Keep callbacks free of strong ownership cycles. Future workers may return owned
-plain data through a bounded channel and a posted message; COM interfaces and
-borrowed native pointers stay on the STA.
+The [compatibility report](validation/tauri-compatibility.md) separates source/ACL
+review from runtime probes, login, notifications and capture behavior.
 
-## Startup and shutdown
+## Persistent data and upgrades
 
-Startup resolves the existing profile location, initializes COM, creates the
-window/state, starts WebView2 asynchronously, and pumps messages with
-`GetMessageW`. A blocking message-pump wait is idle waiting, not polling or a
-synchronous wait for a WebView2 completion.
+| Platform | Storage contract |
+| :--- | :--- |
+| Windows | Explicit `%LOCALAPPDATA%\Discard\WebView2`, unchanged from v0.1.0 |
+| Linux | Tauri app-local data directory for `com.zvenytoh.discard`, plus `webview` |
+| macOS | WKWebView store ID `[213,50,140,206,145,20,70,192,190,120,110,183,97,61,185,142]` |
 
-On window destruction, remove callback-visible state before taking and closing
-the controller. Post the quit message, release remaining references, and finally
-uninitialize COM. A late controller completion must close its received controller
-instead of attaching it to a destroyed window. Explicit controller closure is
-part of the native boundary.
-[Controller Close](https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/win32/icorewebview2controller#close).
+Keep bundle identifier `com.zvenytoh.discard` stable. Never read, export, clear,
+rename or copy cookies during migration. Directory/startup errors return to the
+presentation boundary; do not recover by silently creating an alternative profile.
+Windows uses the existing location, but sign-in preservation across the upgrade
+still needs a user-controlled acceptance check. Profiles are not shared across OSes.
 
-Errors from asynchronous callbacks are stored and signaled to the message loop;
-user-facing modal UI occurs after the callback has returned. Ordinary startup
-errors return to the entry point. Cleanup paths must preserve the original
-failure and never restart the browser automatically.
+Inno Setup retains AppId `{D5328CCE-9114-46C0-BE78-6EB7613DB98E}` and destination
+`%LOCALAPPDATA%\Programs\Discard`. The app and shortcuts use AppUserModelID
+`Zvenytoh.Discard`. Uninstall preserves the separate profile. No tray lifecycle or
+automatic app update mechanism is included.
 
-## Trust boundaries
+## Appearance and background policy
 
-- Main-frame URLs must use HTTPS, the exact host `discord.com`, port 443, and no
-  embedded username/password. Parse with `url`; do not compare URL prefixes.
-- WebView2 manages site resources and subframes. Main-frame filtering is not a
-  network firewall and must not be described as one.
-- Pop-ups and downloads are currently canceled. External-link support requires
-  a separate user-initiated, validated policy before being implemented.
-- Host objects and web messages are disabled. No page scripts are injected.
-- Site permissions retain WebView2's defaults; camera/microphone behavior remains
-  unvalidated. Future permission handling must check origin and user intent.
-- User data stays in `%LOCALAPPDATA%\Discard\WebView2`. Never rename, clear,
-  export, or log account/session data as part of an architecture change.
+The existing coral artwork supplies native executable/bundle, taskbar/Dock,
+shortcut and installer icons. Windows 11 uses DWM caption `#1E1F22` and text
+`#F2F3F5`; Windows 10 falls back to supported native dark styling. macOS/Linux keep
+their native title-bar conventions, so exact caption colors depend on the system.
 
-## Packaging and releases
+Windows resource adjustments are event-driven: minimized rendering is hidden,
+then restored with the window. Memory target is NORMAL while active or playing
+document audio and LOW when otherwise inactive/minimized. Optional interface or
+observation failures retain a usable app and conservative NORMAL behavior.
+The memory target is a hint, not a private-memory limit. Document-audio silence
+cannot establish that no microphone/video call exists.
 
-Packaging is a build/distribution concern outside the runtime core. The Inno Setup
-recipe in `installer/Discard.iss` installs into the current user's Programs folder,
-adds shortcuts, and registers uninstallation. It leaves the separate WebView2
-profile intact. The same application ID and destination are reused for upgrades.
+macOS disables supported WKWebView background throttling to favor ongoing
+messages/calls, which can cost background resources. Linux retains engine defaults.
+No target gets forced suspension, timer polling, injected keepalives, automatic
+reloads, cache purges or GPU-disable flags. Preserve the release LTO, single
+codegen unit, stripping and panic-abort settings until measurements justify changes.
 
-`scripts/build-installer.ps1` requires a completed release build and validates any
-release tag against the package version. It downloads the Microsoft Evergreen
-bootstrapper, requires a valid Microsoft Authenticode signature, and compiles the
-installer. Setup checks the documented HKCU/HKLM registry locations and runs the
-bootstrapper only when the Runtime is missing. Internet access is then required.
+Actual CPU, private memory and working set must be measured separately for only
+Discard's process tree. Compile success and a smaller working set do not prove
+lower allocation, better responsiveness or reliable calls. See the
+[performance report](validation/tauri-performance.md).
 
-The Windows workflow builds the installer on branch/PR runs. A `v*` tag also
-enables a separate publication job after the build passes. Only that job receives
-repository contents write permission. It publishes `Discard-Setup.exe`,
-`Discard.exe`, and SHA256 checksums. The MSVC target links the C runtime statically;
-GNU packaging additionally carries `WebView2Loader.dll` when present.
+## Build and release boundary
 
-The installer uses the brand icon for setup, shortcuts, and the uninstall entry.
-The application executable itself still uses the system icon. Binaries are unsigned;
-no signing certificate or automatic application update mechanism is configured.
-Installer compilation is distinct from installation/uninstallation runtime testing.
+Runtime remains one crate; packaging belongs to scripts and native CI.
+Tauri 2.12.4 and tauri-build 2.7.3 are pinned, with tauri-cli 2.12.3 installed via
+Cargo and dependencies resolved in `Cargo.lock`. No Node toolchain is required.
 
-## Rust conventions and extension rules
+The Desktop workflow targets Windows MSVC x64, Ubuntu 22.04 x64, macOS Intel and
+Apple Silicon. Windows retains Inno and its Microsoft-signed WebView2 bootstrapper
+verification. Linux produces DEB/AppImage; macOS produces architecture-specific
+DMGs with a macOS 14 floor. Branch/PR builds yield artifacts only.
 
-Keep `unsafe` within `native/`, with local safety comments describing ownership,
-thread affinity, pointer validity, and allocator requirements. Keep native error
-sources until presentation when distinct failure handling is introduced. Use
-`Result` and `?` for recoverable operations; avoid `unwrap`, `expect`, or deliberate
-panics in the callback path. Keep `unsafe_op_in_unsafe_fn` denied.
+A matching version tag permits one publication job after all required builds.
+It computes public asset checksums and excludes unsigned/ad-hoc experimental
+macOS artifacts. Signing/notarization secrets belong only in CI; no certificate
+is currently configured. Windows binaries remain unsigned. Neither workflow
+configuration nor CI compilation establishes engine/media compatibility.
 
-Add a module when a responsibility has a real owner. Add a trait when a concrete
-substitution or testing boundary needs one, and another crate when independent
-reuse or a stronger compile-time boundary justifies it. A future tray adapter
-belongs with Win32; a future update policy must stay separate from download and
-installation effects.
+## Rust and validation conventions
 
-Validation follows `AGENTS.md`: formatting, Clippy, and release compilation for
-Rust changes; unit/functional tests only on explicit request. The design document
-lists the runtime cases needed before claiming lifecycle or media correctness.
+Keep application `unsafe` inside `src/platform/`, with local safety comments on
+thread affinity, ownership, pointer validity and allocation. Deny unsafe operations
+inside unsafe functions without explicit blocks. Favor `Result` and `?`; avoid
+panic paths in callbacks. Preserve original error sources until final reporting.
+
+Follow `AGENTS.md`: formatting, Clippy and release compilation for Rust changes;
+unit/functional runs only when explicitly requested. Runtime, account, media and
+installation cases are independent checks. Record unperformed checks rather than
+presenting all desktop targets as validated support.

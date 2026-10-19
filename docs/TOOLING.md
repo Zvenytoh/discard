@@ -1,69 +1,104 @@
-# Outils et skills
+# Tooling and skills
 
-## Répartition
+## Development baseline
 
-| Outil | Portée | Usage |
-| --- | --- | --- |
-| AGENTS.md | Dépôt | Règles du projet, toujours lues |
-| RTK | Global | Sorties compactes Git/Cargo, commandes prises en charge |
-| Ponytail | Skill global | Implémentations simples et minimales |
-| Superpowers | Skills globaux | Planification complexe et diagnostic, invocation ciblée |
-| Graphify | `.agents/skills/graphify` | Questions d'architecture si un index existe |
-| ast-grep | Global | Recherche structurelle/refactoring Rust |
-| Context7 | MCP global | Documentation récente uniquement si nécessaire |
-| Semgrep | Global | Audit ponctuel de sécurité |
-| OpenAI Skills | Globaux | Sélection selon le besoin ; pas de copie de tout le catalogue |
+Discard is a root Rust crate with Tauri 2.12.4 and tauri-build 2.7.3, pinned in
+`Cargo.toml` and resolved in `Cargo.lock`. Install the reviewed Rust CLI:
 
-Les binaires utilisateur sont installés dans `%USERPROFILE%\.local\bin`.
-Ouvrir un nouveau terminal après modification du PATH. Les skills globaux
-Ponytail et les skills OpenAI spécialisés déjà présents sont réutilisés.
-Superpowers est disponible via `%USERPROFILE%\.agents\skills\superpowers`,
-une jonction vers `%USERPROFILE%\.codex\superpowers\skills`.
-Ses mises à jour se font explicitement avec `git -C "$env:USERPROFILE\.codex\superpowers" pull --ff-only`.
-Les instructions utilisateur priment sur les workflows des skills, notamment
-pour les tests et les sous-agents.
+```sh
+cargo install tauri-cli --version 2.12.3 --locked
+```
 
-## Exemples
+There is no npm, React or frontend build pipeline. Use `scripts/dev.ps1` on
+Windows and `bash scripts/dev.sh` on macOS/Linux, with tasks `check`, `fmt`,
+`clippy`, `build` and `run`. The build/run helpers require CLI 2.12.3. Both use
+the repository root. `build` invokes Tauri without bundling; packaging is separate.
+
+```sh
+cargo fmt --all -- --check
+cargo clippy --locked --all-targets -- -D warnings
+cargo build --release --locked
+```
+
+Unit and functional test runs require explicit user instruction. CI checks
+formatting, Clippy and compilation without adding an automatic test suite.
+
+Windows distribution uses the MSVC toolchain, C++ Build Tools, Windows SDK and
+WebView2 Evergreen. Local x64 GNU builds additionally need `WebView2Loader.dll`
+beside the executable; the PowerShell helper copies it. Machine-specific setup
+may live in ignored `.tools/env.ps1`; tracked scripts must contain no developer's
+absolute toolchain paths.
+
+macOS development requires Xcode command-line tools and macOS 14+. Linux targets
+Ubuntu 22.04+ with WebKitGTK 4.1, GTK 3, build-essential, OpenSSL, librsvg and
+packaging dependencies; see the README's package command and CI's exact list.
+Do not infer native runtime compatibility from cross-compilation.
+
+## Tool scope
+
+| Tool | Scope | Use |
+| :--- | :--- | :--- |
+| `AGENTS.md` | Repository | Contribution rules and validation limits |
+| RTK | Global | Compact supported Git/Cargo/search output |
+| Ponytail | Global skill | Simple, minimal implementations |
+| Superpowers | Global skills | Targeted planning, execution and debugging |
+| Graphify | Project skill | Architecture queries when an index exists |
+| ast-grep | Global | Structural Rust search/refactoring |
+| Context7 | Global MCP | Current external documentation when needed |
+| Semgrep | Global | Relevant security audits |
+| OpenAI skills | Selected global skills | Specialized tasks as needed |
+
+User instructions override skill defaults. For this migration the user authorized
+simple peripheral subagent tasks; core changes and final integration stay with
+the primary agent. Do not broaden delegation without an applicable instruction.
+
+Example scoped commands:
 
 ```powershell
 rtk git status --short
 rtk cargo build --release --locked
 ast-grep run --lang rust --pattern 'unsafe { $$$BODY }' src
-graphify query "Comment la fenêtre possède-t-elle le contrôleur WebView2 ?"
 semgrep scan --config p/rust --metrics=off --error src
 ```
 
-Graphify est installé mais aucun index n'est créé pour ce petit socle. Ne lancer
-la génération qu'en cas de besoin ; `graphify-out/` est ignoré par Git. Le skill
-Graphify inclut sa licence et ses références dans le dépôt.
+No Graphify index is required for this small codebase. Query an existing
+`graphify-out/graph.json` before architecture exploration when present, and keep
+generated output ignored. Do not regenerate unchanged graphs for routine edits.
 
-Context7 est déclaré dans `%USERPROFILE%\.codex\config.toml` avec l'endpoint
-`https://mcp.context7.com/mcp`. Si le service demande une authentification ou si
-le quota anonyme est épuisé, connecter le compte depuis les réglages MCP de Codex.
-Ne jamais ajouter de clé API au dépôt. Les nouveaux skills sont chargés dans une
-nouvelle conversation/session Codex.
+## Local configuration
 
-## Environnement de cette machine
+User binaries may be installed under `%USERPROFILE%\.local\bin`. Reload the
+terminal after PATH changes. Existing Ponytail/OpenAI skills are reused rather
+than copied into each repository. The Superpowers skills junction on this machine
+points from `%USERPROFILE%\.agents\skills\superpowers` to
+`%USERPROFILE%\.codex\superpowers\skills`; updates should be deliberate.
 
-Un fichier local ignoré `.tools/env.ps1` réutilise la chaîne Rust/GNU déjà présente
-sur cette machine. Il dépend de son emplacement actuel et modifie uniquement
-l'environnement du terminal courant. Depuis le dossier Discard :
+Context7 is configured globally in `%USERPROFILE%\.codex\config.toml` with
+`https://mcp.context7.com/mcp`. Authentication belongs in the user's MCP settings,
+never a tracked API key. Use official documentation if the service is unavailable.
 
-```powershell
-. .\.tools\env.ps1
-.\scripts\dev.ps1 check
-.\scripts\dev.ps1 build
-.\scripts\dev.ps1 run
-```
+The current machine may need an ignored `.tools/env.ps1` to select its installed
+Rust/linker environment. CI uses native targets and does not rely on that file.
+Report the exact compiler/linker and commands actually used; do not describe a
+GNU-only local build as MSVC validation.
 
-Pour une autre machine, installer les prérequis MSVC du README. La CI utilise
-MSVC ; le contrôle local initial utilise GNU, faute de linker Visual C++ installé.
+## Packaging
 
-## Sources
+Windows keeps `scripts/build-installer.ps1` and Inno Setup 6.3+, with bootstrapper
+signature verification. Linux packaging uses `cargo tauri build --bundles
+deb,appimage -- --locked`; macOS uses `cargo tauri build --bundles dmg -- --locked`.
+The Desktop workflow pins the CLI, names target artifacts distinctly, and allows
+publication only from a version-matched tag after all builds pass. Apple signing
+and notarization credentials belong in CI secrets, never local tracked files.
 
+See [compatibility](validation/tauri-compatibility.md) and
+[performance](validation/tauri-performance.md) for recorded evidence and blockers.
+
+## References
+
+- [Tauri prerequisites](https://tauri.app/start/prerequisites/)
 - [RTK](https://github.com/rtk-ai/rtk)
 - [Superpowers](https://github.com/obra/superpowers)
 - [ast-grep](https://github.com/ast-grep/ast-grep)
-- [Context7 pour Codex](https://github.com/upstash/context7/blob/master/docs/clients/codex.mdx)
-- [Configuration MCP officielle de Codex](https://developers.openai.com/codex/mcp)
+- [Context7](https://github.com/upstash/context7)
 - [Semgrep](https://semgrep.dev/docs/getting-started/)

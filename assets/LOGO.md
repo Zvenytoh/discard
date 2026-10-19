@@ -7,9 +7,16 @@ negative-space seam. Generated with the built-in ImageGen tool using the
 - `logo.png`: transparent raster master, 1254 × 1254 pixels.
 - `icon.ico`: Windows export with 16, 24, 32, 48, 64, 128 and 256 pixel frames.
 
-The README uses the PNG. Setup, installed shortcuts, and the uninstall entry use
-the ICO. It is not yet embedded in the application executable. This is raster
-artwork, not an editable vector.
+The README uses the PNG. `assets/icons/` contains platform PNG/ICO/ICNS variants
+generated from this master with tauri-cli 2.12.3:
+
+```sh
+cargo tauri icon assets/logo.png --output assets/icons
+```
+
+Tauri embeds the configured application/bundle icons. Windows setup, installed
+shortcuts and the uninstall entry use the ICO. The coral artwork is unchanged.
+This is raster artwork, not an editable vector.
 
 ## Generation prompt
 
