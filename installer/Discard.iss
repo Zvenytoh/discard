@@ -37,8 +37,8 @@ Source: "..\target\release\WebView2Loader.dll"; DestDir: "{app}"; Flags: ignorev
 Source: "..\target\dependencies\MicrosoftEdgeWebview2Setup.exe"; Flags: dontcopy
 
 [Icons]
-Name: "{autoprograms}\Discard"; Filename: "{app}\discard.exe"; IconFilename: "{app}\discard.ico"
-Name: "{autodesktop}\Discard"; Filename: "{app}\discard.exe"; IconFilename: "{app}\discard.ico"; Tasks: desktopicon
+Name: "{autoprograms}\Discard"; Filename: "{app}\discard.exe"; IconFilename: "{app}\discard.ico"; AppUserModelID: "Zvenytoh.Discard"
+Name: "{autodesktop}\Discard"; Filename: "{app}\discard.exe"; IconFilename: "{app}\discard.ico"; AppUserModelID: "Zvenytoh.Discard"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\discard.exe"; Description: "Launch Discard"; Flags: nowait postinstall skipifsilent

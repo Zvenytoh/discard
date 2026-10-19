@@ -2,10 +2,14 @@
 
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(windows)]
+mod windows;
 
 pub(crate) fn configure(
     builder: tauri::webview::WebviewWindowBuilder<'_, tauri::Wry, tauri::App>,
 ) -> tauri::webview::WebviewWindowBuilder<'_, tauri::Wry, tauri::App> {
+    #[cfg(windows)]
+    windows::identity();
     #[cfg(target_os = "macos")]
     let builder = macos::configure(builder);
     #[cfg(windows)]
@@ -14,6 +18,9 @@ pub(crate) fn configure(
 }
 
 pub(crate) fn attach(_window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    #[cfg(windows)]
+    return windows::attach(_window);
+    #[cfg(not(windows))]
     Ok(())
 }
 
@@ -21,13 +28,13 @@ pub(crate) fn show_error(message: &str) {
     eprintln!("{message}");
     #[cfg(windows)]
     {
-        use windows::{core::HSTRING, Win32::UI::WindowsAndMessaging::*};
+        use ::windows::{core::HSTRING, Win32::UI::WindowsAndMessaging::*};
         // SAFETY: strings are owned for the synchronous call; no parent is required.
         unsafe {
             MessageBoxW(
                 None,
                 &HSTRING::from(message),
-                windows::core::w!("Discard"),
+                ::windows::core::w!("Discard"),
                 MB_OK | MB_ICONERROR,
             );
         }
