@@ -7,10 +7,9 @@ use std::{
 };
 use tauri::Manager;
 use webview2_com::{
-    take_pwstr, IsDocumentPlayingAudioChangedEventHandler,
+    take_pwstr,
     Microsoft::Web::WebView2::Win32::{
         ICoreWebView2, ICoreWebView2Controller, ICoreWebView2Settings9, ICoreWebView2_19,
-        ICoreWebView2_8, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW as LOW,
         COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL as NORMAL,
         COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC,
     },
@@ -26,7 +25,7 @@ use windows::{
         },
         UI::{
             Shell::{SetCurrentProcessExplicitAppUserModelID, ShellExecuteW},
-            WindowsAndMessaging::{GetForegroundWindow, IsIconic, IsWindowVisible, SW_SHOWNORMAL},
+            WindowsAndMessaging::{IsIconic, IsWindowVisible, SW_SHOWNORMAL},
         },
     },
 };
@@ -38,12 +37,8 @@ thread_local! {
 struct Background {
     hwnd: HWND,
     controller: ICoreWebView2Controller,
-    memory: Option<ICoreWebView2_19>,
-    audio: Option<(ICoreWebView2_8, i64)>,
     help: (ICoreWebView2, i64),
-    memory_enabled: Cell<bool>,
     visible: Cell<Option<bool>>,
-    memory_level: Cell<Option<i32>>,
 }
 
 impl Drop for Background {
@@ -51,12 +46,6 @@ impl Drop for Background {
         // SAFETY: subscription and engine are released on their owning UI STA.
         if let Err(error) = unsafe { self.help.0.remove_NewWindowRequested(self.help.1) } {
             eprintln!("Could not remove help handler: {error}");
-        }
-        if let Some((audio, token)) = &self.audio {
-            // SAFETY: native state and its subscription are released on the owning UI STA.
-            if let Err(error) = unsafe { audio.remove_IsDocumentPlayingAudioChanged(*token) } {
-                eprintln!("Could not remove audio observer: {error}");
-            }
         }
     }
 }
@@ -138,32 +127,18 @@ fn initialize(controller: ICoreWebView2Controller, hwnd: HWND) -> Result<()> {
             })),
             &mut help_token,
         )?;
-        let audio = web.cast::<ICoreWebView2_8>().ok().and_then(|audio| {
-            let mut token = 0;
-            match audio.add_IsDocumentPlayingAudioChanged(
-                &IsDocumentPlayingAudioChangedEventHandler::create(Box::new(|_, _| {
-                    apply();
-                    Ok(())
-                })),
-                &mut token,
-            ) {
-                Ok(()) => Some((audio, token)),
-                Err(error) => {
-                    eprintln!("Audio observation unavailable; using normal memory mode: {error}");
-                    None
-                }
+        // Silence does not prove that an outgoing call/share is idle. Keep the
+        // engine's normal target rather than trimming an active encoder.
+        if let Ok(memory) = web.cast::<ICoreWebView2_19>() {
+            if let Err(error) = memory.SetMemoryUsageTargetLevel(NORMAL) {
+                eprintln!("Could not request normal WebView memory target: {error}");
             }
-        });
-        let memory = web.cast::<ICoreWebView2_19>().ok();
+        }
         Background {
             hwnd,
             controller,
-            memory_enabled: Cell::new(audio.is_some() && memory.is_some()),
-            memory,
-            audio,
             help: (web, help_token),
             visible: Cell::new(None),
-            memory_level: Cell::new(None),
         }
     };
     let previous = BACKGROUND.with(|slot| slot.borrow_mut().replace(Rc::new(state)));
@@ -222,34 +197,6 @@ pub(super) fn apply() {
             match state.controller.SetIsVisible(visible) {
                 Ok(()) => state.visible.set(Some(visible)),
                 Err(error) => eprintln!("Could not update WebView visibility: {error}"),
-            }
-        }
-        let mut playing = BOOL(0);
-        let observed = state
-            .audio
-            .as_ref()
-            .is_some_and(|(audio, _)| audio.IsDocumentPlayingAudio(&mut playing).is_ok());
-        let level = if state.memory_enabled.get()
-            && observed
-            && !playing.as_bool()
-            && GetForegroundWindow() != state.hwnd
-        {
-            LOW
-        } else {
-            NORMAL
-        };
-        if let Some(memory) = &state.memory {
-            if state.memory_level.get() != Some(level.0) {
-                match memory.SetMemoryUsageTargetLevel(level) {
-                    Ok(()) => state.memory_level.set(Some(level.0)),
-                    Err(error) => {
-                        state.memory_enabled.set(false);
-                        eprintln!("Memory optimization unavailable: {error}");
-                        if memory.SetMemoryUsageTargetLevel(NORMAL).is_ok() {
-                            state.memory_level.set(Some(NORMAL.0));
-                        }
-                    }
-                }
             }
         }
     }

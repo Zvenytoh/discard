@@ -150,9 +150,10 @@ CSS updates. Visual fidelity, mixed DPI, zoom, dragging and real input remain
 subject to runtime acceptance.
 
 Windows resource adjustments are event-driven: minimized or tray-hidden rendering is hidden,
-then restored with the window. Memory target is NORMAL while active or playing
-document audio and LOW when otherwise inactive/minimized. Optional interface or
-observation failures retain a usable app and conservative NORMAL behavior.
+then restored with the window. Memory target remains NORMAL, including while
+inactive or silent: playback silence cannot establish that no outgoing call or
+stream is active. Automatic LOW targeting and its playback observer are removed.
+The engine defaults remain in place if the optional memory interface is unavailable.
 The memory target is a hint, not a private-memory limit. Document-audio silence
 cannot establish that no microphone/video call exists.
 
@@ -283,3 +284,19 @@ activity detection, local RPC and native audio. The plugin also releases its
 instance lock on Exit, before Tauri launches the replacement process. Destroyed-window cleanup remains idempotent.
 Older binaries that do not implement a single-instance lock must be closed once
 when upgrading. Runtime rapid-launch/tray/restart acceptance remains pending.
+
+## Media stability corrections (v0.3.4)
+
+RPC and game-activity replay clone the current state under the mutex, then release
+it before window.url/eval can dispatch to the UI thread. Page-load callbacks can
+therefore read state without waiting on a worker that is itself waiting on the UI.
+
+Native audio setup shares a monotonic 10-second deadline across worklet loading,
+AudioContext.resume and the WebSocket handshake. Track-end cancellation also
+rejects each pending stage. Timeout closes the optional audio path and returns
+working browser video. No periodic timeout or background polling is introduced.
+
+The automatic LOW memory target was removed rather than inferring media idleness
+from audible playback. This favors call/stream stability and may increase memory
+retention while the window is in the background. Renderer visibility handling,
+engine security settings, profile paths and updater verification are preserved.

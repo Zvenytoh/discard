@@ -43,9 +43,9 @@ system codec or guarantee compatibility with every graphics stack.
   port 443, without embedded credentials. Pop-ups and downloads are blocked.
 - No application-native commands or capability grants for remote
   content. Tauri still uses framework-internal scripts and IPC.
-- Event-driven Windows background handling: hide rendering when minimized or hidden and
-  request lower memory use while inactive, with normal memory priority for
-  playing audio and conservative fallbacks. The page is never forcibly suspended.
+- Event-driven Windows background handling: hide rendering when minimized or hidden.
+  Keep normal memory priority during silent calls and streams as well as playback;
+  automatic LOW memory targeting is disabled. The page is never forcibly suspended.
 - Native release CI for Windows x64, with formatting, Clippy, production builds,
   the signed updater installer, and per-user Inno packaging.
 
@@ -99,7 +99,8 @@ Discard corrects the pinned Vencord WebScreenShare module's 0.6 Mbit/s target to
 6 Mbit/s, retaining its existing 8 Mbit/s ceiling and browser bandwidth adaptation.
 This is a target, not a guaranteed bitrate. The encoder profile now follows the
 selected Vencord resolution/FPS rather than always advertising a 4K/120 ceiling.
-If optional native audio fails, browser video continues and a notification warns
+Native audio setup has a shared 10-second deadline covering worklet loading,
+audio activation and connection. If it fails, browser video continues and a notification warns
 that native audio is unavailable. Real-call stability still requires validation.
 
 ### Window and tray lifecycle

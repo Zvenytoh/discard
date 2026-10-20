@@ -11,6 +11,12 @@
         if (!endpoint || !video.getVideoTracks().length) return video;
         let context, socket, node, timer, audio, rejectStart;
         let cleaned = false;
+        const deadline = performance.now() + 10000;
+        const startup = promise => new Promise((resolve, reject) => {
+            rejectStart = reject;
+            timer = setTimeout(() => reject(new Error("Native audio startup timed out")), Math.max(0, deadline - performance.now()));
+            Promise.resolve(promise).then(resolve, reject);
+        }).finally(() => { clearTimeout(timer); rejectStart = undefined; });
         const cleanup = () => {
             if (cleaned) return;
             cleaned = true;
@@ -18,7 +24,7 @@
             window.removeEventListener("pagehide", ended);
             socket?.close();
             node?.disconnect();
-            if (context) void context.close();
+            if (context) void context.close().catch(error => console.error("Discard audio cleanup:", error));
         };
         const ended = () => { audio?.stop(); rejectStart?.(new Error("Screen sharing stopped")); cleanup(); };
         for (const track of video.getVideoTracks()) {
@@ -31,27 +37,25 @@
             context = new AudioContext({ sampleRate: 48000 });
             if (context.sampleRate !== 48000) throw new Error("48 kHz audio is unavailable");
             const worklet = URL.createObjectURL(new Blob([__DISCARD_WORKLET__], { type: "application/javascript" }));
-            try { await context.audioWorklet.addModule(worklet); }
+            try { await startup(context.audioWorklet.addModule(worklet)); }
             finally { URL.revokeObjectURL(worklet); }
             if (cleaned) throw new Error("Screen sharing stopped");
             node = new AudioWorkletNode(context, "discard-audio", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
             const output = context.createMediaStreamDestination();
             node.connect(output);
-            await context.resume();
+            await startup(context.resume());
             if (cleaned) throw new Error("Screen sharing stopped");
-            await new Promise((resolve, reject) => {
-                rejectStart = reject;
+            await startup(new Promise((resolve, reject) => {
                 socket = new WebSocket(endpoint);
                 socket.binaryType = "arraybuffer";
-                timer = setTimeout(() => reject(new Error("Native audio did not start")), 10000);
                 socket.onmessage = ({ data }) => {
-                    if (data === "ready") { clearTimeout(timer); resolve(); }
+                    if (data === "ready") { resolve(); }
                     else if (typeof data === "string" && data.startsWith("error:")) { reject(new Error(data.slice(6))); cleanup(); }
                     else if (data instanceof ArrayBuffer && data.byteLength <= 65536 && data.byteLength % 8 === 0) node.port.postMessage(data, [data]);
                 };
                 socket.onerror = () => reject(new Error("Native audio connection failed"));
                 socket.onclose = () => { reject(new Error("Native audio stopped")); output.stream.getTracks().forEach(track => track.stop()); cleanup(); };
-            });
+            }));
             video.getAudioTracks().forEach(track => { video.removeTrack(track); track.stop(); });
             audio = output.stream.getAudioTracks()[0];
             video.addTrack(audio);

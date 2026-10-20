@@ -88,8 +88,10 @@ pub(crate) fn replay(app: &tauri::AppHandle) {
     let Some(service) = app.try_state::<Service>() else {
         return;
     };
-    let Ok(current) = service.current.lock() else {
-        return;
+    // Release the state lock before any synchronous UI-thread dispatch.
+    let current = match service.current.lock() {
+        Ok(current) => current.clone(),
+        Err(_) => return,
     };
     if let Some(window) = app.get_webview_window("main") {
         if window
@@ -98,7 +100,7 @@ pub(crate) fn replay(app: &tauri::AppHandle) {
         {
             if let Err(error) = window.eval(format!(
                 "window.__discardRpc={};window.dispatchEvent(new Event('discard-rpc'));",
-                json!(*current)
+                json!(current)
             )) {
                 eprintln!("Could not publish RPC activity: {error}");
             }

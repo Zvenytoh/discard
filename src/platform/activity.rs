@@ -110,9 +110,11 @@ fn publish(app: &tauri::AppHandle, activity: Option<serde_json::Value>) {
 
 pub(crate) fn replay(app: &tauri::AppHandle) {
     if let Some(service) = app.try_state::<Service>() {
-        if let Ok(current) = service.current.lock() {
-            publish(app, current.clone());
-        }
+        let current = match service.current.lock() {
+            Ok(current) => current.clone(),
+            Err(_) => return,
+        };
+        publish(app, current);
     }
 }
 
