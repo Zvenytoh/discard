@@ -68,10 +68,12 @@ pub(crate) fn start(app: &tauri::AppHandle) {
                 tauri::async_runtime::spawn(async move {
                     let _permit = permit;
                     tokio::select! { _ = stop.changed() => {}, _ = client(connection, &app, &current, &id) => {} }
-                    if let Ok(mut state) = current.lock() {
-                        state.remove(&id);
+                    let changed = current
+                        .lock()
+                        .is_ok_and(|mut state| state.remove(&id).is_some());
+                    if changed {
+                        replay(&app);
                     }
-                    replay(&app);
                 });
             }
         });
@@ -85,10 +87,18 @@ pub(crate) fn stop(app: &tauri::AppHandle) {
 }
 
 pub(crate) fn replay(app: &tauri::AppHandle) {
+    let owner = app.clone();
+    if let Err(error) = app.run_on_main_thread(move || publish(&owner)) {
+        eprintln!("Could not schedule RPC activity: {error}");
+    }
+}
+
+fn publish(app: &tauri::AppHandle) {
     let Some(service) = app.try_state::<Service>() else {
         return;
     };
-    // Release the state lock before any synchronous UI-thread dispatch.
+    // Read the latest state on the UI thread; a delayed older snapshot must not win.
+    // Release the lock before any potentially reentrant native calls.
     let current = match service.current.lock() {
         Ok(current) => current.clone(),
         Err(_) => return,
@@ -109,20 +119,29 @@ pub(crate) fn replay(app: &tauri::AppHandle) {
 }
 
 async fn read(pipe: &mut NamedPipeServer) -> std::io::Result<(u32, Vec<u8>)> {
-    let operation = pipe.read_u32_le().await?;
-    let size = pipe.read_u32_le().await? as usize;
-    if size > 65536 {
-        return Err(std::io::ErrorKind::InvalidData.into());
-    }
-    let mut data = vec![0; size];
-    pipe.read_exact(&mut data).await?;
-    Ok((operation, data))
+    // Idle games may stay connected; only an already-started frame has a deadline.
+    let first = pipe.read_u8().await?;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        let mut operation = [first, 0, 0, 0];
+        pipe.read_exact(&mut operation[1..]).await?;
+        let size = pipe.read_u32_le().await? as usize;
+        if size > 65536 {
+            return Err(std::io::ErrorKind::InvalidData.into());
+        }
+        let mut data = vec![0; size];
+        pipe.read_exact(&mut data).await?;
+        Ok((u32::from_le_bytes(operation), data))
+    })
+    .await?
 }
 
 async fn write(pipe: &mut NamedPipeServer, operation: u32, data: &[u8]) -> std::io::Result<()> {
-    pipe.write_u32_le(operation).await?;
-    pipe.write_u32_le(data.len() as u32).await?;
-    pipe.write_all(data).await
+    tokio::time::timeout(Duration::from_secs(5), async {
+        pipe.write_u32_le(operation).await?;
+        pipe.write_u32_le(data.len() as u32).await?;
+        pipe.write_all(data).await
+    })
+    .await?
 }
 
 async fn client(
@@ -196,14 +215,21 @@ async fn client(
                 filtered.insert("type".into(), json!(0));
                 Value::Object(filtered)
             };
-            if let Ok(mut state) = current.lock() {
+            let changed = if let Ok(mut state) = current.lock() {
                 if activity.is_null() {
-                    state.remove(id);
-                } else {
+                    state.remove(id).is_some()
+                } else if state.get(id) != Some(&activity) {
                     state.insert(id.into(), activity.clone());
+                    true
+                } else {
+                    false
                 }
+            } else {
+                return Err("RPC state unavailable".into());
+            };
+            if changed {
+                replay(app);
             }
-            replay(app);
             json!({"cmd":cmd,"evt":null,"nonce":request["nonce"],"data":activity})
         } else {
             json!({"cmd":cmd,"evt":"ERROR","nonce":request["nonce"],"data":{"code":4000,"message":"Only SET_ACTIVITY is supported"}})

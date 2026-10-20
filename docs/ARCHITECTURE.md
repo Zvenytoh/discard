@@ -220,7 +220,12 @@ no process paths or process enumeration API are exposed to remote content.
 
 RPC uses discord-ipc-0 through discord-ipc-9 only when no existing owner holds a
 name. Local clients are bounded to eight, 64 KiB frames and 60 frames/second per
-connection. It accepts handshake, ping and SET_ACTIVITY only; no shell, invite,
+connection. Idle established connections have no read deadline; after the first
+byte, a frame must complete within five seconds. Responses have the same write
+deadline, with outer service cancellation covering both directions. Identical
+activities do not trigger page updates, and queued publications read current state
+on the UI thread so an older snapshot cannot overwrite a later one.
+It accepts handshake, ping and SET_ACTIVITY only; no shell, invite,
 filesystem, credential or capture command is implemented. Disconnect and page
 reload update the Vencord adapter, with serialized metadata lookups.
 
@@ -239,8 +244,7 @@ MessagePort packet and retains only the newest pending packet during a stall.
 The worklet acknowledges after copying into its bounded ring; overflow drops
 old samples rather than accumulating delay. Every server write, including errors,
 is cancellable and has a two-second timeout. PCM travels as binary WebSocket
-frames, never
-video or JSON/base64 sample batches. getDisplayMedia retains the browser's video
+frames, never video or JSON/base64 sample batches. getDisplayMedia retains the browser's video
 and attaches the native audio track. Its stop methods, system-ended events,
 navigation and native stop action close the channel and release capture. The
 normal path has no local listener or native recording until explicitly armed.

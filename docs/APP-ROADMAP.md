@@ -86,3 +86,15 @@ Moving-content sharing, independent clock drift, real audio quality, lifecycle
 acceptance and install/update acceptance remain unverified. These changes do not
 establish that the reported stream-quality problem is resolved. No diagnostic UI
 is restored. Unit/functional runs still require an explicit request.
+
+## Implementation update: v0.3.7
+
+- Rich Presence frame assembly is limited to five seconds after its first byte;
+  responses also have a five-second deadline. Idle established game connections
+  remain open, and existing eight-client/frame-size/rate/cancellation limits stay.
+- Repeated identical activities and empty disconnects no longer republish state.
+- RPC publication now snapshots current state on the UI thread, with its lock
+  released before window operations, avoiding stale queued activity updates.
+- v0.3.6 Windows release build and publication succeeded. Installer, portable,
+  update signature, manifest and checksums are published; no install/call/runtime
+  validation is implied. Native audio and moving-content acceptance remain open.
