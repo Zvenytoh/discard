@@ -6,6 +6,8 @@ use tauri::Manager;
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(windows)]
+mod titlebar;
+#[cfg(windows)]
 mod windows;
 
 pub(crate) fn configure(

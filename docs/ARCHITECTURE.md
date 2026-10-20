@@ -25,6 +25,7 @@ local service/repository layers would add no useful boundary.
 | `src/tray.rs` | Native tray icon, Open/Quit menu and window restoration |
 | `src/profile.rs` | Explicit persistent engine-data locations |
 | `src/platform/mod.rs` | Narrow platform configuration/attachment dispatch and native error presentation |
+| `src/platform/titlebar.rs` | Windows native non-client header, centered document title and window controls |
 | `src/platform/windows.rs` | Windows identity, DWM appearance and event-driven WebView2 resource policy |
 | `src/platform/macos.rs` | WKWebView persistent store and background scheduling configuration |
 | `build.rs`, `tauri.conf.json` | Tauri build context, identity, icons and bundle metadata |
@@ -50,7 +51,7 @@ service registry. Add a module only when it owns a concrete responsibility.
 setup. It loads `https://discord.com/app` directly at 1200×800 logical pixels,
 with native decorations, a dark theme and opaque `#242429` background.
 `tauri.conf.json` declares no initial windows; it grants no remote capabilities.
-No frontend development server or application-authored page script is involved.
+No frontend development server or permanent application-authored page script is involved.
 
 `profile::directory(&tauri::AppHandle)` returns the platform's explicit data
 location before the window is built. `platform::configure(builder)` applies
@@ -119,9 +120,19 @@ are stored in GitHub Actions secrets, never in source; only the public key is em
 ## Appearance and background policy
 
 The existing coral artwork supplies native executable/bundle, taskbar/Dock,
-shortcut and installer icons. Windows 11 uses DWM caption `#242429` and text
-`#F2F3F5`; Windows 10 falls back to supported native dark styling. macOS/Linux keep
-their native title-bar conventions, so exact caption colors depend on the system.
+shortcut and installer icons. Windows uses a native non-client header inspired
+by the supplied reference: `#121214`, 32 logical pixels high, centered page title
+and minimize/maximize/close controls. The page title is read through Tauri's
+native document-title event, never through a permanent page script. Windows
+retains native dragging, resizing, double-click maximize and system commands;
+close still uses the tray lifecycle. The HWND subclass is UI-thread-only and
+removed on destruction. GDI objects/DCs are released after each event-driven paint.
+No extra WebView, IPC grant or timer is added. Failed installation of the custom
+frame restores the standard window frame. The inbox button issues a single DOM click on Discord's English/French inbox
+control; selector compatibility depends on the website and is not yet runtime
+validated. Help opens the fixed official support URL in the default browser. macOS/Linux keep
+their native title-bar conventions. Visual fidelity, mixed DPI, caption controls
+and accessibility have not yet been validated at runtime.
 
 Windows resource adjustments are event-driven: minimized or tray-hidden rendering is hidden,
 then restored with the window. Memory target is NORMAL while active or playing

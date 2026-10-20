@@ -36,7 +36,8 @@ system codec or guarantee compatibility with every graphics stack.
 ### What the candidate includes
 
 - One native window with the coral Discard icon, dark appearance, and persistent
-  engine data. Closing the window hides it to the system tray. Use **Ouvrir
+  engine data. Windows adds a compact dark header with a centered page title
+  and native window actions. Closing the window hides it to the system tray. Use **Ouvrir
   Discard** to restore it or **Quitter** to exit completely.
 - Main-frame navigation restricted to HTTPS on the exact `discord.com` host,
   port 443, without embedded credentials. Pop-ups and downloads are blocked.

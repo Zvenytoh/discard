@@ -60,6 +60,19 @@ fn create_window(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let mut builder =
         WebviewWindowBuilder::new(app, "main", WebviewUrl::External(navigation::HOME.parse()?))
             .title("Discard")
+            .on_document_title_changed(|window, title| {
+                let title = title
+                    .trim_end_matches(" | Discord")
+                    .trim_end_matches(" - Discord");
+                let title = if title.is_empty() || title == "Discord" {
+                    "Amis"
+                } else {
+                    title
+                };
+                if let Err(error) = window.set_title(&title.chars().take(160).collect::<String>()) {
+                    eprintln!("Could not update window title: {error}");
+                }
+            })
             .inner_size(1200.0, 800.0)
             .theme(Some(tauri::Theme::Dark))
             .background_color(tauri::window::Color(36, 36, 41, 255))

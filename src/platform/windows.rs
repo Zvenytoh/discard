@@ -58,6 +58,19 @@ fn current() -> Option<Rc<Background>> {
     BACKGROUND.with(|slot| slot.borrow().clone())
 }
 
+pub(super) fn open_inbox() {
+    let Some(state) = current() else { return };
+    // SAFETY: invoked only by this window's native caption on its owning STA.
+    // This one-shot DOM click uses the website's own inbox; no bridge is exposed.
+    unsafe {
+        let result = state.controller.CoreWebView2().and_then(|web| web.ExecuteScript(
+            w!("(()=>{const b=document.querySelector('[aria-label=\"Boîte de réception\"], [aria-label=\"Inbox\"]');if(b)b.click()})()"), None));
+        if let Err(error) = result {
+            eprintln!("Could not open Discord inbox: {error}");
+        }
+    }
+}
+
 pub(super) fn identity() {
     // SAFETY: the static UTF-16 identifier is valid for this synchronous process call.
     if let Err(error) = unsafe { SetCurrentProcessExplicitAppUserModelID(w!("Zvenytoh.Discard")) } {
@@ -180,6 +193,9 @@ pub(super) fn apply() {
 }
 
 pub(super) fn attach(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    if let Err(error) = super::titlebar::attach(window) {
+        eprintln!("Custom title bar unavailable; keeping the native frame: {error}");
+    }
     let app = window.app_handle().clone();
     // WebView2's ParentWindow is Wry's child container, not the native top-level.
     let hwnd = window.hwnd()?.0 as usize;
