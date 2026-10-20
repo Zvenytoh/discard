@@ -240,34 +240,20 @@ No CSP is weakened to force the prototype to work. Real-call validation remains
 mandatory before treating application audio as production-ready; Windows capture
 availability does not prove Discord will publish or receive the attached track.
 
-## Stream investigation (v0.3.1)
+## Screen-share profile handling
 
-The local Vencord adapter wraps the pinned WebScreenShare quality helper and
-corrects only its 600000 bit/s target to 6000000, bounded by its existing ceiling.
-Upstream vendored assets and their checksums remain unchanged. Capture constraints,
-codec selection, network adaptation and Discord's profile labels are not spoofed.
+The pinned WebScreenShare plugin defines generous upper bounds before opening
+its picker; getDisplayMedia later applies the current resolution/FPS selection.
+Discard leaves those upper bounds intact. Replacing them with previously saved
+settings before the picker opened could restrict the next selection, so that
+local override is removed. Only the 600000 bit/s target correction to 6000000,
+bounded by the upstream ceiling, remains. Browser adaptation and codecs are
+unchanged; no fixed 16:9 dimensions are imposed by Discard.
 
-stream.js observes browser peer construction before Vencord/Discord initialize.
-It keeps a set of live peers, releases closed peers, and samples sender stats only
-when the user requests the native tray diagnostic. It reports capture settings,
-actual outbound encoding sizes/FPS and qualityLimitationReason where available;
-no recurring stats timer, native capability, network upload or remote-quality
-claim is introduced. Cameras and screen shares may both appear in the report.
-
-## Stream stability follow-up (v0.3.2)
-
-The WebScreenShare adapter replaces its unconditional 3840x2160/120 capture and
-encoding profile with the selected, allowlisted Vencord resolution/FPS. The
-browser still negotiates actual source size and network-limited encoding; this
-does not rewrite Discord's profile label or promise the selected quality reaches
-viewers. Native audio failure preserves working browser video and reports the
-failure instead of stopping all capture tracks. The native diagnostic restores
-the window, immediately displays a selectable DOM report and bounds each sender
-stats request to three seconds. No background polling was added.
-
-The tray checks WebView2 ExecuteScript completion for a boolean acknowledgment;
-a missing diagnostic script now produces a native error instead of a silent no-op.
-No WebMessages or remote invocation permissions are enabled for this response.
+The additional RTCPeerConnection proxy, sender tracking, diagnostic dialog, native
+ExecuteScript acknowledgment and tray command were removed at the user's request.
+Native audio retains its existing browser capture wrapper, timeout and fallback.
+No new media engine, background sampler or dependency is introduced.
 
 ## Single-instance and tray lifecycle (v0.3.3)
 

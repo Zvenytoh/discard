@@ -25,7 +25,6 @@ pub(crate) fn configure(
     let builder = builder
         .decorations(false)
         .shadow(false)
-        .initialization_script(include_str!("stream.js"))
         .initialization_script(titlebar::PAGE_STYLE);
     #[cfg(target_os = "macos")]
     let builder = macos::configure(builder);
@@ -79,42 +78,5 @@ pub(crate) fn refresh_visibility(app: &tauri::AppHandle) -> tauri::Result<()> {
     }
     #[cfg(not(windows))]
     let _ = app;
-    Ok(())
-}
-
-pub(crate) fn stream_diagnostic(window: &tauri::WebviewWindow) -> tauri::Result<()> {
-    #[cfg(windows)]
-    window.with_webview(|webview| {
-        // SAFETY: ExecuteScript and its completion run on WebView2's owning STA.
-        // The callback result is borrowed only during the callback; no page-to-
-        // native API is exposed. Read the acknowledgment instead of silently
-        // succeeding when the diagnostic initialization script is missing.
-        let result = unsafe {
-            (|| -> ::windows::core::Result<()> {
-                let script = ::windows::core::HSTRING::from(
-                    "(() => { if(typeof window.__discardStreamDiagnostic !== 'function') return false; \
-                     window.__discardStreamDiagnostic().catch(error => { \
-                       console.error(error); \
-                       const report = document.querySelector('#discard-stream-diagnostic textarea'); \
-                       if(report) report.value = 'Diagnostic indisponible : ' + String(error); \
-                     }); return true; })()",
-                );
-                webview.controller().CoreWebView2()?.ExecuteScript(
-                    &script,
-                    &webview2_com::ExecuteScriptCompletedHandler::create(Box::new(|status, value| {
-                        if status.is_err() || value != "true" {
-                            show_error("Le diagnostic du stream n'est pas charge. Redemarre Discard avec la nouvelle version, puis relance le partage.");
-                        }
-                        Ok(())
-                    })),
-                )
-            })()
-        };
-        if let Err(error) = result {
-            show_error(&format!("Stream diagnostic unavailable: {error}"));
-        }
-    })?;
-    #[cfg(not(windows))]
-    let _ = window;
     Ok(())
 }

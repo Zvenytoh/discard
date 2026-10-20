@@ -86,22 +86,21 @@ Discard is distributed under GPL-3.0-or-later with bundled Vencord. Upstream
 commit, asset hashes, licenses and source links are in [vendor/vencord](vendor/vencord).
 The game catalog attribution is in [vendor/GAMES-SOURCE.txt](vendor/GAMES-SOURCE.txt).
 
-### Stream quality diagnostics
+### Screen sharing
 
-The tray's **Diagnostic du stream** reports live local capture dimensions/FPS
-and outgoing WebRTC encoding dimensions/FPS when exposed by the browser. It also
-shows the encoder's quality limitation reason (for example bandwidth or CPU).
-The action restores the window and opens a selectable report.
-These values are separate from Discord's stream-profile label; they do not measure
-what a remote participant receives. The diagnostic runs only when requested.
+Select the desired resolution and frame rate in Vencord's sharing picker. The
+browser negotiates capture and encoding within those limits, adapting to motion,
+CPU capacity and network conditions. An unchanged desktop can produce fewer
+encoded frames than the configured FPS; that alone does not establish stuttering.
 
-Discard corrects the pinned Vencord WebScreenShare module's 0.6 Mbit/s target to
-6 Mbit/s, retaining its existing 8 Mbit/s ceiling and browser bandwidth adaptation.
-This is a target, not a guaranteed bitrate. The encoder profile now follows the
-selected Vencord resolution/FPS rather than always advertising a 4K/120 ceiling.
-Native audio setup has a shared 10-second deadline covering worklet loading,
-audio activation and connection. If it fails, browser video continues and a notification warns
-that native audio is unavailable. Real-call stability still requires validation.
+Discard corrects the pinned Vencord module's 0.6 Mbit/s target to 6 Mbit/s while
+retaining the existing 8 Mbit/s ceiling and bandwidth adaptation. It does not cap
+the next share with a previously saved resolution/FPS profile. The additional
+WebRTC diagnostic wrapper and tray report have been removed.
+
+Optional native audio has a shared 10-second startup deadline. Failure preserves
+working browser video and displays an audio warning. Real-call quality and latency
+still require acceptance testing; no fixed resolution/FPS or latency is promised.
 
 ### Window and tray lifecycle
 

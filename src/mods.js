@@ -1,18 +1,10 @@
-// Use the selected profile instead of the pinned plugin's unconditional 4K/120.
+// Preserve Vencord's upper bounds: the current picker constrains capture later.
+// Capping them with the previously saved profile can limit the next selection.
 const screenShare = Vencord.Plugins.plugins.WebScreenShare;
 if (screenShare?.getGoliveMaxQuality) {
     const quality = screenShare.getGoliveMaxQuality;
     screenShare.getGoliveMaxQuality = function (...args) {
         const result = quality.apply(this, args);
-        const selected = Vencord.Settings.plugins.WebScreenShare;
-        const height = Number(selected.resolution);
-        const framerate = Number(selected.frameRate);
-        if ([480, 720, 1080, 1440, 2160].includes(height) && [15, 30, 60, 120].includes(framerate)) {
-            const width = Math.round(height * 16 / 9);
-            for (const profile of [result.capture, result.encode]) {
-                if (profile) Object.assign(profile, { width, height, framerate, pixelCount: width * height });
-            }
-        }
         if (result.bitrateTarget === 600000) result.bitrateTarget = Math.min(6000000, result.bitrateMax);
         return result;
     };
