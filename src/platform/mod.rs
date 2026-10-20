@@ -15,6 +15,8 @@ pub(crate) fn configure(
 ) -> tauri::webview::WebviewWindowBuilder<'_, tauri::Wry, tauri::App> {
     #[cfg(windows)]
     windows::identity();
+    #[cfg(windows)]
+    let builder = builder.initialization_script(titlebar::PAGE_STYLE);
     #[cfg(target_os = "macos")]
     let builder = macos::configure(builder);
     // Native drag/drop events are unused; let Discord receive HTML file drops.

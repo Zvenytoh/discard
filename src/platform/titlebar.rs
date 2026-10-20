@@ -24,6 +24,33 @@ use windows::{
 };
 
 const SUBCLASS: usize = 0x44495343;
+
+// Keep one caption row: Discord's own top bar otherwise duplicates our native
+// controls. Static CSS also matches later SPA renders without an observer/timer.
+pub(super) const PAGE_STYLE: &str = r#"
+(() => {
+    if (window.top !== window) return;
+    const install = () => {
+        if (document.getElementById('discard-single-titlebar')) return;
+        const style = document.createElement('style');
+        style.id = 'discard-single-titlebar';
+        style.textContent = `
+            #app-mount div[class^="base_"]:has(> div[class^="bar_"]) {
+                grid-template-rows: [top] 0px [titleBarEnd] min-content [noticeEnd] 1fr [contentEnd] min-content [end] !important;
+            }
+            #app-mount div[class^="base_"] > div[class^="bar_"] {
+                display: none !important;
+            }
+        `;
+        document.documentElement.appendChild(style);
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', install, { once: true });
+    } else {
+        install();
+    }
+})();
+"#;
 thread_local! {
     // This adapter owns exactly one top-level window, on the UI thread.
     static PRESSED: Cell<u32> = const { Cell::new(0) };

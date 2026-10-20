@@ -128,7 +128,12 @@ retains native dragging, resizing, double-click maximize and system commands;
 close still uses the tray lifecycle. The HWND subclass is UI-thread-only and
 removed on destruction. GDI objects/DCs are released after each event-driven paint.
 No extra WebView, IPC grant or timer is added. Failed installation of the custom
-frame restores the standard window frame. The inbox button issues a single DOM click on Discord's English/French inbox
+frame restores the standard window frame. A one-shot document initialization
+installs static CSS hiding Discord's duplicate top bar and collapsing its grid
+row. Class-prefix selectors target only the direct bar under the app base; channel
+headers and toolbars remain visible. CSS matches later SPA renders without a
+MutationObserver, recurring script or polling. Discord markup changes can require
+updating these selectors. The inbox button issues a single DOM click on Discord's English/French inbox
 control; selector compatibility depends on the website and is not yet runtime
 validated. Help opens the fixed official support URL in the default browser. macOS/Linux keep
 their native title-bar conventions. Visual fidelity, mixed DPI, caption controls
