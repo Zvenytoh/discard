@@ -130,8 +130,8 @@ retain Windows input/capture/accessibility semantics, with hover, pressed,
 keyboard-focus and red-close feedback. System commands minimize, maximize/restore
 and close to tray; restoring focus after maximize returns typing to Discord.
 
-The HWND subclass removes the redundant OS caption while retaining native frame
-insets and resizing. WebView2 Settings9 enables CSS app-region dragging before
+Windows disables Tauri decorations and shadows. The Wry host has a native window
+region excluding the controls, updated on resize, so Chromium cannot cover them. WebView2 Settings9 enables CSS app-region dragging before
 the first Discord navigation. Windows first creates an empty browser; native
 security/drag settings are applied before Navigate(HOME). Discord receives no
 native command bridge, web messages or host objects. Other platforms navigate
@@ -141,7 +141,7 @@ The one-shot document initialization installs static layout CSS. No observer,
 recurring script, synthetic inbox click or additional WebView is used. Native
 children are owned/destroyed by their parent; hooks remain on the UI thread and
 are removed at destruction. Brushes/pens/DCs are released synchronously. Failed
-frame setup restores native decorations. Discord class-prefix changes may need
+control setup errors are logged. Discord class-prefix changes may need
 CSS updates. Visual fidelity, mixed DPI, zoom, dragging and real input remain
 subject to runtime acceptance.
 
@@ -191,4 +191,4 @@ unit/functional runs only when explicitly requested. Runtime, account, media and
 installation cases are independent checks. Record unperformed checks rather than
 presenting all desktop targets as validated support.
 
-The restored Windows window has no visible non-client border. The WebView2 sibling host clips sibling windows, and the control strip is raised after controller creation so Chromium cannot cover the caption buttons.
+The restored Windows window disables native decorations and shadows. A native region reserves the caption controls independently of Chromium rendering order.

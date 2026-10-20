@@ -629,7 +629,7 @@ dependencies = [
 
 [[package]]
 name = "discard"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "serde_json",
  "tauri",

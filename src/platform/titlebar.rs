@@ -4,13 +4,7 @@ use windows::{
     core::w,
     Win32::{
         Foundation::{COLORREF, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM},
-        Graphics::{
-            Dwm::{
-                DwmSetWindowAttribute, DWMNCRP_DISABLED, DWMNCRP_USEWINDOWSTYLE,
-                DWMWA_NCRENDERING_POLICY,
-            },
-            Gdi::*,
-        },
+        Graphics::Gdi::*,
         UI::{
             Controls::{
                 DRAWITEMSTRUCT, ODS_FOCUS, ODS_NOFOCUSRECT, ODS_SELECTED, ODT_BUTTON, WM_MOUSELEAVE,
@@ -28,7 +22,10 @@ const MIN: i32 = 101;
 const MAX: i32 = 102;
 const CLOSE: i32 = 103;
 pub(super) const PAGE_STYLE: &str = include_str!("titlebar.js");
-thread_local! { static HOVER:Cell<i32>=const{Cell::new(0)}; }
+thread_local! {
+    static HOVER: Cell<i32> = const { Cell::new(0) };
+    static HOST: Cell<HWND> = const { Cell::new(HWND(std::ptr::null_mut())) };
+}
 
 pub(super) fn attach(window: &tauri::WebviewWindow) -> Result<(), Box<dyn std::error::Error>> {
     let hwnd = window.hwnd()?;
@@ -73,56 +70,49 @@ pub(super) fn attach(window: &tauri::WebviewWindow) -> Result<(), Box<dyn std::e
                 SetWindowSubclass(button, Some(button_proc), HOOK, 0).ok()?;
             }
             SetWindowSubclass(hwnd, Some(frame_proc), HOOK, 0).ok()?;
-            DwmSetWindowAttribute(
-                hwnd,
-                DWMWA_NCRENDERING_POLICY,
-                &DWMNCRP_DISABLED as *const _ as _,
-                size_of::<i32>() as u32,
-            )?;
-            SetWindowPos(
-                hwnd,
-                None,
-                0,
-                0,
-                0,
-                0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
-            )?;
             layout(hwnd);
             Ok(())
         })();
         if let Err(error) = result {
             let _ = RemoveWindowSubclass(hwnd, Some(frame_proc), HOOK);
             let _ = DestroyWindow(strip);
-            let _ = DwmSetWindowAttribute(
-                hwnd,
-                DWMWA_NCRENDERING_POLICY,
-                &DWMNCRP_USEWINDOWSTYLE as *const _ as _,
-                size_of::<i32>() as u32,
-            );
-            let _ = SetWindowPos(
-                hwnd,
-                None,
-                0,
-                0,
-                0,
-                0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
-            );
             return Err(error.into());
         }
     }
     Ok(())
 }
 
-/// Keep the asynchronously created Wry host below the caption controls.
-pub(super) fn above_webview(host: HWND) {
-    // SAFETY: live controller parent on the owning UI STA. Sibling clipping
-    // prevents Chromium from painting over the higher native control strip.
+/// Exclude the native controls from Chromium's surface, independent of z-order.
+pub(super) fn above_webview(host: HWND) -> windows::core::Result<()> {
+    // SAFETY: live Wry container on its owning UI STA; subclass retains no pointers.
     unsafe {
-        let style = GetWindowLongPtrW(host, GWL_STYLE);
-        SetWindowLongPtrW(host, GWL_STYLE, style | WS_CLIPSIBLINGS.0 as isize);
+        SetWindowSubclass(host, Some(host_proc), HOOK, 0).ok()?;
+        HOST.set(host);
         layout(GetAncestor(host, GA_ROOT));
+    }
+    Ok(())
+}
+
+unsafe extern "system" fn host_proc(
+    hwnd: HWND,
+    msg: u32,
+    wp: WPARAM,
+    lp: LPARAM,
+    id: usize,
+    _: usize,
+) -> LRESULT {
+    // SAFETY: this hook lives only as long as the UI-thread Wry container.
+    unsafe {
+        let result = DefSubclassProc(hwnd, msg, wp, lp);
+        match msg {
+            WM_SIZE => layout(GetAncestor(hwnd, GA_ROOT)),
+            WM_NCDESTROY => {
+                HOST.set(HWND::default());
+                let _ = RemoveWindowSubclass(hwnd, Some(host_proc), id);
+            }
+            _ => {}
+        }
+        result
     }
 }
 
@@ -138,27 +128,10 @@ unsafe extern "system" fn frame_proc(
 ) -> LRESULT {
     unsafe {
         match msg {
-            WM_NCCALCSIZE => {
-                let rect = if wp.0 != 0 {
-                    std::ptr::addr_of_mut!((*(lp.0 as *mut NCCALCSIZE_PARAMS)).rgrc[0])
-                } else {
-                    lp.0 as *mut RECT
-                };
-                // Use the entire restored window, without a visible frame.
-                if IsZoomed(hwnd).as_bool() {
-                    let original = *rect;
-                    DefSubclassProc(hwnd, msg, wp, lp);
-                    (*rect).top = original.top + ((*rect).left - original.left);
-                }
-                return LRESULT(0);
-            }
             WM_SIZE | WM_DPICHANGED => {
                 let result = DefSubclassProc(hwnd, msg, wp, lp);
                 layout(hwnd);
                 return result;
-            }
-            WM_NCPAINT | WM_NCACTIVATE => {
-                return LRESULT(1);
             }
             WM_NCDESTROY => {
                 let _ = RemoveWindowSubclass(hwnd, Some(frame_proc), id);
@@ -281,6 +254,35 @@ unsafe fn layout(hwnd: HWND) {
         }
         let width = scale(hwnd, 44);
         let height = scale(hwnd, 32);
+        let host = HOST.get();
+        if !host.is_invalid() {
+            let mut bounds = RECT::default();
+            if GetClientRect(host, &mut bounds).is_ok() {
+                // Windows owns the region after success; clip all Chromium children.
+                let right = bounds.right;
+                let bottom = bounds.bottom;
+                let left = (right - 3 * width).max(0);
+                let points = [
+                    POINT { x: 0, y: 0 },
+                    POINT { x: left, y: 0 },
+                    POINT { x: left, y: height },
+                    POINT {
+                        x: right,
+                        y: height,
+                    },
+                    POINT {
+                        x: right,
+                        y: bottom,
+                    },
+                    POINT { x: 0, y: bottom },
+                ];
+                let region = CreatePolygonRgn(&points, WINDING);
+                if !region.is_invalid() && SetWindowRgn(host, Some(region), true) == 0 {
+                    let _ = DeleteObject(region.into());
+                    eprintln!("Could not reserve native window controls");
+                }
+            }
+        }
         if let Err(error) = SetWindowPos(
             strip,
             Some(HWND_TOP),

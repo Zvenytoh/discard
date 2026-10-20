@@ -90,7 +90,7 @@ fn initialize(controller: ICoreWebView2Controller, hwnd: HWND) -> Result<()> {
     let state = unsafe {
         let mut host = HWND::default();
         controller.ParentWindow(&mut host)?;
-        super::titlebar::above_webview(host);
+        super::titlebar::above_webview(host)?;
         let web = controller.CoreWebView2()?;
         let settings = web.Settings()?;
         // This host has no web-to-native app API, including Tauri IPC.
@@ -257,7 +257,9 @@ pub(super) fn apply() {
 
 pub(super) fn attach(window: &tauri::WebviewWindow) -> tauri::Result<()> {
     if let Err(error) = super::titlebar::attach(window) {
-        eprintln!("Custom title bar unavailable; keeping the native frame: {error}");
+        eprintln!("Custom title bar unavailable; restoring the native frame: {error}");
+        window.set_decorations(true)?;
+        window.set_shadow(true)?;
     }
     let app = window.app_handle().clone();
     // WebView2's ParentWindow is Wry's child container, not the native top-level.
