@@ -24,7 +24,7 @@ use windows::{
         },
         UI::{
             Shell::SetCurrentProcessExplicitAppUserModelID,
-            WindowsAndMessaging::{GetForegroundWindow, IsIconic},
+            WindowsAndMessaging::{GetForegroundWindow, IsIconic, IsWindowVisible},
         },
     },
 };
@@ -136,12 +136,12 @@ fn theme() {
     }
 }
 
-fn apply() {
+pub(super) fn apply() {
     let Some(state) = current() else { return };
     // SAFETY: window/audio callbacks and with_webview run on this UI STA; Rc
     // keeps state alive through reentrant COM calls without a RefCell borrow.
     unsafe {
-        let visible = !IsIconic(state.hwnd).as_bool();
+        let visible = IsWindowVisible(state.hwnd).as_bool() && !IsIconic(state.hwnd).as_bool();
         if state.visible.get() != Some(visible) {
             match state.controller.SetIsVisible(visible) {
                 Ok(()) => state.visible.set(Some(visible)),

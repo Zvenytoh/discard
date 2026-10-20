@@ -1,5 +1,8 @@
 //! Small native adapters; remote content receives no native commands.
 
+#[cfg(windows)]
+use tauri::Manager;
+
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(windows)]
@@ -45,4 +48,14 @@ pub(crate) fn show_startup_error(error: &dyn std::fmt::Display) {
         "Discard could not start. Close other Discard windows and try again.\n\
          Your session data has been preserved.\n\n{error}"
     ));
+}
+
+pub(crate) fn refresh_visibility(app: &tauri::AppHandle) -> tauri::Result<()> {
+    #[cfg(windows)]
+    if let Some(webview) = app.get_webview_window("main") {
+        webview.with_webview(|_| windows::apply())?;
+    }
+    #[cfg(not(windows))]
+    let _ = app;
+    Ok(())
 }

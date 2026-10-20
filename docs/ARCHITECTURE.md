@@ -22,6 +22,7 @@ local service/repository layers would add no useful boundary.
 | `src/app.rs` | Tauri setup, one external window, security hooks and exit policy |
 | `src/navigation.rs` | Home URL and pure main-frame allowlist |
 | `src/updater.rs` | Windows installed-app startup check, native consent and verified Inno handoff |
+| `src/tray.rs` | Native tray icon, Open/Quit menu and window restoration |
 | `src/profile.rs` | Explicit persistent engine-data locations |
 | `src/platform/mod.rs` | Narrow platform configuration/attachment dispatch and native error presentation |
 | `src/platform/windows.rs` | Windows identity, DWM appearance and event-driven WebView2 resource policy |
@@ -55,7 +56,11 @@ No frontend development server or application-authored page script is involved.
 location before the window is built. `platform::configure(builder)` applies
 builder-only settings, and `platform::attach(&window)` adds native behavior to the
 constructed window. Native state stays private to the adapter. Closing `main`
-requests application exit explicitly, including on macOS.
+hides it only after a tray icon has been created successfully. The tray owns an
+Open/Quit menu; restoring shows, unminimizes and focuses the same window. Quit
+and updater handoffs still exit the process directly. Failed tray creation falls
+back to close-to-exit, preventing an inaccessible hidden application. On Windows,
+hide and restore explicitly refresh the event-driven renderer visibility policy.
 
 Tauri/Wry owns the platform event loop and engine lifecycle. Windows COM access
 must remain on the owning UI STA thread through Tauri's native webview callback.
@@ -101,8 +106,7 @@ still needs a user-controlled acceptance check. Profiles are not shared across O
 
 Inno Setup retains AppId `{D5328CCE-9114-46C0-BE78-6EB7613DB98E}` and destination
 `%LOCALAPPDATA%\Programs\Discard`. The app and shortcuts use AppUserModelID
-`Zvenytoh.Discard`. Uninstall preserves the separate profile. No tray lifecycle or
-periodic update polling is included. Since v0.2.1, installed Windows builds check
+`Zvenytoh.Discard`. Uninstall preserves the separate profile. No periodic update polling is included. Since v0.2.1, installed Windows builds check
 once at startup through the Rust updater plugin and ask before downloading.
 The HTTPS GitHub feed may only point to this repository's versioned installer URL.
 The plugin verifies Minisign and the signed version before returning installer bytes.
@@ -119,7 +123,7 @@ shortcut and installer icons. Windows 11 uses DWM caption `#242429` and text
 `#F2F3F5`; Windows 10 falls back to supported native dark styling. macOS/Linux keep
 their native title-bar conventions, so exact caption colors depend on the system.
 
-Windows resource adjustments are event-driven: minimized rendering is hidden,
+Windows resource adjustments are event-driven: minimized or tray-hidden rendering is hidden,
 then restored with the window. Memory target is NORMAL while active or playing
 document audio and LOW when otherwise inactive/minimized. Optional interface or
 observation failures retain a usable app and conservative NORMAL behavior.

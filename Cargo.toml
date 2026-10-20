@@ -10,7 +10,7 @@ publish = false
 [dependencies]
 serde_json = "1"
 url = "2.5"
-tauri = { version = "=2.12.4", features = [] }
+tauri = { version = "=2.12.4", features = ["tray-icon"] }
 
 [build-dependencies]
 tauri-build = { version = "=2.7.3", features = [] }

@@ -5,6 +5,7 @@ mod app;
 mod navigation;
 mod platform;
 mod profile;
+mod tray;
 #[cfg(windows)]
 mod updater;
 

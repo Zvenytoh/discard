@@ -5,7 +5,7 @@ use tauri::{
     Manager, WebviewUrl, WebviewWindowBuilder,
 };
 
-use crate::{navigation, platform, profile};
+use crate::{navigation, platform, profile, tray};
 
 pub(crate) fn run() -> tauri::Result<()> {
     let builder = tauri::Builder::default();
@@ -20,17 +20,37 @@ pub(crate) fn run() -> tauri::Result<()> {
                 platform::show_startup_error(&error);
                 app.handle().exit(1);
             } else {
+                if let Err(error) = tray::create(app) {
+                    // A failed tray must never leave an inaccessible hidden app.
+                    eprintln!("Tray unavailable; closing the window will quit: {error}");
+                }
                 #[cfg(windows)]
                 crate::updater::start(app.handle().clone());
             }
             Ok(())
         })
         .on_window_event(|window, event| {
-            if window.label() == "main"
-                && matches!(event, tauri::WindowEvent::CloseRequested { .. })
-            {
-                // Also exit on macOS, whose default keeps an app alive without windows.
-                window.app_handle().exit(0);
+            if window.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    if window.app_handle().tray_by_id("main").is_some() {
+                        match window.hide() {
+                            Ok(()) => {
+                                api.prevent_close();
+                                if let Err(error) =
+                                    platform::refresh_visibility(window.app_handle())
+                                {
+                                    eprintln!("Could not refresh hidden renderer: {error}");
+                                }
+                            }
+                            Err(error) => {
+                                eprintln!("Could not hide window: {error}");
+                                window.app_handle().exit(0);
+                            }
+                        }
+                    } else {
+                        window.app_handle().exit(0);
+                    }
+                }
             }
         })
         .run(tauri::generate_context!())

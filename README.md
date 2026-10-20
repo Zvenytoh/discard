@@ -36,12 +36,13 @@ system codec or guarantee compatibility with every graphics stack.
 ### What the candidate includes
 
 - One native window with the coral Discard icon, dark appearance, and persistent
-  engine data. Closing the window exits the app, including on macOS.
+  engine data. Closing the window hides it to the system tray. Use **Ouvrir
+  Discard** to restore it or **Quitter** to exit completely.
 - Main-frame navigation restricted to HTTPS on the exact `discord.com` host,
   port 443, without embedded credentials. Pop-ups and downloads are blocked.
 - No application-native commands or capability grants for remote
   content. Tauri still uses framework-internal scripts and IPC.
-- Event-driven Windows background handling: hide rendering when minimized and
+- Event-driven Windows background handling: hide rendering when minimized or hidden and
   request lower memory use while inactive, with normal memory priority for
   playing audio and conservative fallbacks. The page is never forcibly suspended.
 - Native CI configuration for all four architecture targets, with formatting,
@@ -64,7 +65,11 @@ and release manifest. The existing installation directory and Discord profile ar
 Install v0.2.1 manually once to enable this feature: older releases cannot update
 themselves. Portable Windows builds, macOS and Linux still update manually.
 Windows updater signatures authenticate releases but are not Authenticode certificates.
-Mobile and system tray integration remain outside this release.
+The tray uses the Discard icon and an Open/Quit menu. A left click restores the
+window on supported desktops; Linux tray interaction depends on the desktop's
+status-icon support. If tray creation fails, closing the window exits instead.
+Calls and notifications while hidden still require runtime validation.
+Mobile remains outside this release.
 
 ## Getting started
 
