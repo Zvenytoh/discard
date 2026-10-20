@@ -8,12 +8,20 @@ use tauri::{
 use crate::{navigation, platform, profile};
 
 pub(crate) fn run() -> tauri::Result<()> {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(windows)]
+    let builder = builder
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init());
+    builder
         .setup(|app| {
             if let Err(error) = create_window(app) {
                 // Tauri panics on setup Err; report here before requesting clean exit.
                 platform::show_startup_error(&error);
                 app.handle().exit(1);
+            } else {
+                #[cfg(windows)]
+                crate::updater::start(app.handle().clone());
             }
             Ok(())
         })

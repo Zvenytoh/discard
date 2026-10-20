@@ -97,3 +97,14 @@ upgrade validation and a fresh remote-content attack probe are not established.
 No macOS signing/notarization credential has been configured by this migration.
 Unsigned experimental macOS packages stay CI artifacts, outside ordinary public
 release downloads. No new release has been published during local execution.
+
+## v0.2.1 startup updater
+
+- Static review confirmed native consent, exact GitHub installer URL, signature and
+  signed-version verification, no downgrade and no remote capability grants.
+- Startup request timeout is 10 seconds; accepted downloads are limited to 120 seconds.
+- The repository signing secret is configured; the public key is embedded in config.
+- A local CLI version-bound signature was generated successfully for a disposable file.
+- Installed upgrade, decline, offline startup and installer restart have not been
+  exercised at runtime. No unit or functional suites were run.
+- Windows installed builds only; portable, Linux and macOS update manually.

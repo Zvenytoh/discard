@@ -42,8 +42,14 @@ Name: "{autodesktop}\Discard"; Filename: "{app}\discard.exe"; IconFilename: "{ap
 
 [Run]
 Filename: "{app}\discard.exe"; Description: "Launch Discard"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\discard.exe"; Flags: nowait skipifnotsilent; Check: IsUpdaterInstall
 
 [Code]
+function IsUpdaterInstall: Boolean;
+begin
+  Result := WizardSilent and (ExpandConstant('{param:DISCARDUPDATE|0}') = '1');
+end;
+
 function HasRuntimeAt(Root: Integer; Key: String): Boolean;
 var
   Version: String;

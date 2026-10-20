@@ -20,10 +20,9 @@ The application uses a single Rust crate and Tauri's desktop lifecycle, without
 React, npm, a local frontend server, or a bundled Chromium distribution.
 Discord provides accounts, conversations, and media through its website.
 
-**The source is a v0.2.0 migration candidate, not a published release.** The
-[existing v0.1.0 release](https://github.com/Zvenytoh/discard/releases/tag/v0.1.0)
-is the earlier Windows-only Win32/WebView2 application. Its installer does not
-contain this Tauri migration.
+Download published packages from the [latest release](https://github.com/Zvenytoh/discard/releases/latest).
+The v0.2.x line uses Tauri; v0.1.0 was the earlier Windows-only Win32 host.
+Platform support and runtime validation are tracked separately below.
 
 | Candidate target | Engine | Packaging | Validation status |
 | :--- | :--- | :--- | :--- |
@@ -40,7 +39,7 @@ system codec or guarantee compatibility with every graphics stack.
   engine data. Closing the window exits the app, including on macOS.
 - Main-frame navigation restricted to HTTPS on the exact `discord.com` host,
   port 443, without embedded credentials. Pop-ups and downloads are blocked.
-- No application-native commands, plugins, or capability grants for remote
+- No application-native commands or capability grants for remote
   content. Tauri still uses framework-internal scripts and IPC.
 - Event-driven Windows background handling: hide rendering when minimized and
   request lower memory use while inactive, with normal memory priority for
@@ -53,23 +52,35 @@ installation behavior need the checks recorded in the
 [compatibility report](docs/validation/tauri-compatibility.md). No CPU or memory
 saving is claimed before the
 [performance measurements](docs/validation/tauri-performance.md).
-Mobile, system tray integration, and automatic app updates are outside this release.
+### App updates
+
+Starting with v0.2.1, the installed Windows application checks once at startup
+for a newer release. Choose **Install update** to download, verify and install it,
+or **Later** to keep using the current version. Discard restarts after installation.
+Offline checks do not prevent startup; there is no periodic background polling.
+The installer signature and its signed version must match the embedded public key
+and release manifest. The existing installation directory and Discord profile are preserved.
+
+Install v0.2.1 manually once to enable this feature: older releases cannot update
+themselves. Portable Windows builds, macOS and Linux still update manually.
+Windows updater signatures authenticate releases but are not Authenticode certificates.
+Mobile and system tray integration remain outside this release.
 
 ## Getting started
 
-For the published Windows-only version, use the
-[v0.1.0 release page](https://github.com/Zvenytoh/discard/releases/tag/v0.1.0).
-To try the migration candidate, build this source or download an artifact from a
-successful [Desktop workflow run](https://github.com/Zvenytoh/discard/actions/workflows/desktop.yml).
-GitHub sign-in may be required for workflow artifacts; a workflow configuration
-alone does not mean the candidate packages have built successfully.
+Download **Discard-Setup.exe** from the
+[latest release](https://github.com/Zvenytoh/discard/releases/latest) for Windows.
+Run the installer as your normal user. Other packages are listed on the release
+page when available. Development builds are also available from successful
+[Desktop workflow runs](https://github.com/Zvenytoh/discard/actions/workflows/desktop.yml);
+GitHub sign-in may be required for workflow artifacts.
 
 | CI artifact | Candidate files |
 | :--- | :--- |
 | `discard-windows-x64` | `Discard-Setup.exe`, `Discard.exe`, `SHA256SUMS.txt` |
-| `discard-linux-x64` | `Discard_0.2.0_linux-x64.deb`, `Discard_0.2.0_linux-x64.AppImage` |
-| `discard-macos-x64` | `Discard_0.2.0_macos-x64[-unsigned-experimental].dmg` |
-| `discard-macos-arm64` | `Discard_0.2.0_macos-arm64[-unsigned-experimental].dmg` |
+| `discard-linux-x64` | `Discard_0.2.1_linux-x64.deb`, `Discard_0.2.1_linux-x64.AppImage` |
+| `discard-macos-x64` | `Discard_0.2.1_macos-x64[-unsigned-experimental].dmg` |
+| `discard-macos-arm64` | `Discard_0.2.1_macos-arm64[-unsigned-experimental].dmg` |
 
 The bracketed macOS suffix is present when signing credentials are unavailable.
 No signing certificate is currently configured for this project. Windows binaries

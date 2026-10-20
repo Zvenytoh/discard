@@ -21,6 +21,7 @@ local service/repository layers would add no useful boundary.
 | `src/main.rs` | Entry point, exit status and final error reporting |
 | `src/app.rs` | Tauri setup, one external window, security hooks and exit policy |
 | `src/navigation.rs` | Home URL and pure main-frame allowlist |
+| `src/updater.rs` | Windows installed-app startup check, native consent and verified Inno handoff |
 | `src/profile.rs` | Explicit persistent engine-data locations |
 | `src/platform/mod.rs` | Narrow platform configuration/attachment dispatch and native error presentation |
 | `src/platform/windows.rs` | Windows identity, DWM appearance and event-driven WebView2 resource policy |
@@ -70,7 +71,8 @@ optimizations must not turn into fatal startup failures.
 - Main-frame navigation policy is not a subresource firewall. Discord's CDN and
   engine-managed requests retain normal browser security behavior.
 - Configure no application invoke handler, privileged remote capability grants
-  or plugins. `withGlobalTauri` is false. Tauri still supplies framework-internal
+  to Discord. Updater and dialog plugins are called only from Rust on Windows,
+  with no remote capability grants. `withGlobalTauri` is false. Tauri still supplies framework-internal
   scripts and IPC; absence of a global object alone is not isolation proof.
 - Keep TLS, origin checks and sandboxing intact. Explicitly return the engine's
   default permission response; this requests WKWebView's origin prompt instead
@@ -100,7 +102,15 @@ still needs a user-controlled acceptance check. Profiles are not shared across O
 Inno Setup retains AppId `{D5328CCE-9114-46C0-BE78-6EB7613DB98E}` and destination
 `%LOCALAPPDATA%\Programs\Discard`. The app and shortcuts use AppUserModelID
 `Zvenytoh.Discard`. Uninstall preserves the separate profile. No tray lifecycle or
-automatic app update mechanism is included.
+periodic update polling is included. Since v0.2.1, installed Windows builds check
+once at startup through the Rust updater plugin and ask before downloading.
+The HTTPS GitHub feed may only point to this repository's versioned installer URL.
+The plugin verifies Minisign and the signed version before returning installer bytes.
+The host writes a unique temporary executable, launches Inno with the existing
+install directory and `/DISCARDUPDATE=1`, then exits. Inno restarts Discard after
+a successful silent install. Temporary installer files are left to Windows temp cleanup.
+Portable Windows, Linux and macOS builds use manual updates. Signing credentials
+are stored in GitHub Actions secrets, never in source; only the public key is embedded.
 
 ## Appearance and background policy
 

@@ -5,6 +5,8 @@ mod app;
 mod navigation;
 mod platform;
 mod profile;
+#[cfg(windows)]
+mod updater;
 
 fn main() -> std::process::ExitCode {
     match app::run() {
