@@ -84,9 +84,9 @@ GitHub sign-in may be required for workflow artifacts.
 | CI artifact | Candidate files |
 | :--- | :--- |
 | `discard-windows-x64` | `Discard-Setup.exe`, `Discard.exe`, `SHA256SUMS.txt` |
-| `discard-linux-x64` | `Discard_0.2.1_linux-x64.deb`, `Discard_0.2.1_linux-x64.AppImage` |
-| `discard-macos-x64` | `Discard_0.2.1_macos-x64[-unsigned-experimental].dmg` |
-| `discard-macos-arm64` | `Discard_0.2.1_macos-arm64[-unsigned-experimental].dmg` |
+| `discard-linux-x64` | `Discard_0.2.2_linux-x64.deb`, `Discard_0.2.2_linux-x64.AppImage` |
+| `discard-macos-x64` | `Discard_0.2.2_macos-x64[-unsigned-experimental].dmg` |
+| `discard-macos-arm64` | `Discard_0.2.2_macos-arm64[-unsigned-experimental].dmg` |
 
 The bracketed macOS suffix is present when signing credentials are unavailable.
 No signing certificate is currently configured for this project. Windows binaries
