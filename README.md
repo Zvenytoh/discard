@@ -86,6 +86,18 @@ Discard is distributed under GPL-3.0-or-later with bundled Vencord. Upstream
 commit, asset hashes, licenses and source links are in [vendor/vencord](vendor/vencord).
 The game catalog attribution is in [vendor/GAMES-SOURCE.txt](vendor/GAMES-SOURCE.txt).
 
+### Stream quality diagnostics
+
+The tray's **Diagnostic du stream** reports live local capture dimensions/FPS
+and outgoing WebRTC encoding dimensions/FPS when exposed by the browser. It also
+shows the encoder's quality limitation reason (for example bandwidth or CPU).
+These values are separate from Discord's stream-profile label; they do not measure
+what a remote participant receives. The diagnostic runs only when requested.
+
+Discard corrects the pinned Vencord WebScreenShare module's 0.6 Mbit/s target to
+6 Mbit/s, retaining its existing 8 Mbit/s ceiling and browser bandwidth adaptation.
+This is a target, not a guaranteed bitrate or a forced resolution/FPS setting.
+
 ### App updates
 
 Starting with v0.2.1, the installed Windows application checks once at startup

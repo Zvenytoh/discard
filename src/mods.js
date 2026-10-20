@@ -1,3 +1,14 @@
+// Correct the pinned bundle's 0.6 Mbps target without editing upstream assets.
+const screenShare = Vencord.Plugins.plugins.WebScreenShare;
+if (screenShare?.getGoliveMaxQuality) {
+    const quality = screenShare.getGoliveMaxQuality;
+    screenShare.getGoliveMaxQuality = function (...args) {
+        const result = quality.apply(this, args);
+        if (result.bitrateTarget === 600000) result.bitrateTarget = Math.min(6000000, result.bitrateMax);
+        return result;
+    };
+}
+
 // Native-to-page activity only; no page-to-native commands.
 Vencord.Webpack.onceReady.then(() => {
     const empty = {};

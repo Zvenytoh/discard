@@ -238,3 +238,17 @@ The bridge uses neither Tauri invoke permissions nor WebMessages/host objects.
 No CSP is weakened to force the prototype to work. Real-call validation remains
 mandatory before treating application audio as production-ready; Windows capture
 availability does not prove Discord will publish or receive the attached track.
+
+## Stream investigation (v0.3.1)
+
+The local Vencord adapter wraps the pinned WebScreenShare quality helper and
+corrects only its 600000 bit/s target to 6000000, bounded by its existing ceiling.
+Upstream vendored assets and their checksums remain unchanged. Capture constraints,
+codec selection, network adaptation and Discord's profile labels are not spoofed.
+
+stream.js observes browser peer construction before Vencord/Discord initialize.
+It keeps a set of live peers, releases closed peers, and samples sender stats only
+when the user requests the native tray diagnostic. It reports capture settings,
+actual outbound encoding sizes/FPS and qualityLimitationReason where available;
+no recurring stats timer, native capability, network upload or remote-quality
+claim is introduced. Cameras and screen shares may both appear in the report.

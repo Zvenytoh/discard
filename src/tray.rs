@@ -26,6 +26,21 @@ pub(crate) fn create(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
 
             "quit" => app.exit(0),
 
+            "stream-diagnostic" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    if window
+                        .url()
+                        .is_ok_and(|url| crate::navigation::allowed(url.as_str()))
+                    {
+                        if let Err(error) = window.eval("window.__discardStreamDiagnostic?.();") {
+                            platform::show_error(&format!(
+                                "Stream diagnostic unavailable: {error}"
+                            ));
+                        }
+                    }
+                }
+            }
+
             "toggle-vencord" | "toggle-activity" => {
                 let name = if event.id.as_ref() == "toggle-vencord" {
                     "vencord"
@@ -113,7 +128,14 @@ fn build_menu(app: &tauri::AppHandle) -> Result<Menu<tauri::Wry>, Box<dyn std::e
         None::<&str>,
     )?;
 
-    let menu = Menu::with_items(app, &[&open, &vencord, &activity])?;
+    let diagnostic = MenuItem::with_id(
+        app,
+        "stream-diagnostic",
+        "Diagnostic du stream",
+        cfg!(windows),
+        None::<&str>,
+    )?;
+    let menu = Menu::with_items(app, &[&open, &vencord, &activity, &diagnostic])?;
     #[cfg(windows)]
     {
         let audio = tauri::menu::Submenu::new(app, "Audio du stream (experimental)", true)?;

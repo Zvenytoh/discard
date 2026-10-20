@@ -25,6 +25,7 @@ pub(crate) fn configure(
     let builder = builder
         .decorations(false)
         .shadow(false)
+        .initialization_script(include_str!("stream.js"))
         .initialization_script(titlebar::PAGE_STYLE);
     #[cfg(target_os = "macos")]
     let builder = macos::configure(builder);
