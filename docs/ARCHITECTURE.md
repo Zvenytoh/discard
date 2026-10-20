@@ -190,3 +190,5 @@ Follow `AGENTS.md`: formatting, Clippy and release compilation for Rust changes;
 unit/functional runs only when explicitly requested. Runtime, account, media and
 installation cases are independent checks. Record unperformed checks rather than
 presenting all desktop targets as validated support.
+
+The restored Windows window has no visible non-client border. The WebView2 sibling host clips sibling windows, and the control strip is raised after controller creation so Chromium cannot cover the caption buttons.

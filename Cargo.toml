@@ -1,6 +1,6 @@
 [package]
 name = "discard"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2021"
 description = "A focused desktop home for Discord Web, built with Rust and Tauri"
 repository = "https://github.com/Zvenytoh/discard"

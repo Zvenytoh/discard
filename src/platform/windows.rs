@@ -88,6 +88,9 @@ pub(super) fn identity() {
 fn initialize(controller: ICoreWebView2Controller, hwnd: HWND) -> Result<()> {
     // SAFETY: Tauri invokes with_webview on the controller's owning UI STA.
     let state = unsafe {
+        let mut host = HWND::default();
+        controller.ParentWindow(&mut host)?;
+        super::titlebar::above_webview(host);
         let web = controller.CoreWebView2()?;
         let settings = web.Settings()?;
         // This host has no web-to-native app API, including Tauri IPC.

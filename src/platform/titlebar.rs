@@ -115,6 +115,17 @@ pub(super) fn attach(window: &tauri::WebviewWindow) -> Result<(), Box<dyn std::e
     Ok(())
 }
 
+/// Keep the asynchronously created Wry host below the caption controls.
+pub(super) fn above_webview(host: HWND) {
+    // SAFETY: live controller parent on the owning UI STA. Sibling clipping
+    // prevents Chromium from painting over the higher native control strip.
+    unsafe {
+        let style = GetWindowLongPtrW(host, GWL_STYLE);
+        SetWindowLongPtrW(host, GWL_STYLE, style | WS_CLIPSIBLINGS.0 as isize);
+        layout(GetAncestor(host, GA_ROOT));
+    }
+}
+
 // SAFETY: registered only on our live UI-thread HWNDs. Windows message pointers
 // remain borrowed during synchronous callbacks; default procedures keep ownership.
 unsafe extern "system" fn frame_proc(
@@ -133,9 +144,12 @@ unsafe extern "system" fn frame_proc(
                 } else {
                     lp.0 as *mut RECT
                 };
-                let original = *rect;
-                DefSubclassProc(hwnd, msg, wp, lp);
-                (*rect).top = original.top + ((*rect).left - original.left);
+                // Use the entire restored window, without a visible frame.
+                if IsZoomed(hwnd).as_bool() {
+                    let original = *rect;
+                    DefSubclassProc(hwnd, msg, wp, lp);
+                    (*rect).top = original.top + ((*rect).left - original.left);
+                }
                 return LRESULT(0);
             }
             WM_SIZE | WM_DPICHANGED => {
@@ -144,7 +158,6 @@ unsafe extern "system" fn frame_proc(
                 return result;
             }
             WM_NCPAINT | WM_NCACTIVATE => {
-                paint_frame(hwnd);
                 return LRESULT(1);
             }
             WM_NCDESTROY => {
@@ -301,38 +314,6 @@ unsafe fn fill(dc: HDC, rect: &RECT, color: u32) {
         let brush = CreateSolidBrush(COLORREF(color));
         FillRect(dc, rect, brush);
         let _ = DeleteObject(brush.into());
-    }
-}
-unsafe fn paint_frame(hwnd: HWND) {
-    // SAFETY: client is excluded, and every acquired DC is released here.
-    unsafe {
-        let mut outer = RECT::default();
-        let mut client = RECT::default();
-        let mut origin = POINT::default();
-        if GetWindowRect(hwnd, &mut outer).is_err() || GetClientRect(hwnd, &mut client).is_err() {
-            return;
-        }
-        if !ClientToScreen(hwnd, &mut origin).as_bool() {
-            return;
-        }
-        let dc = GetWindowDC(Some(hwnd));
-        if dc.is_invalid() {
-            return;
-        }
-        let x = origin.x - outer.left;
-        let y = origin.y - outer.top;
-        ExcludeClipRect(dc, x, y, x + client.right, y + client.bottom);
-        fill(
-            dc,
-            &RECT {
-                left: 0,
-                top: 0,
-                right: outer.right - outer.left,
-                bottom: outer.bottom - outer.top,
-            },
-            0x141212,
-        );
-        ReleaseDC(Some(hwnd), dc);
     }
 }
 unsafe fn paint_button(container: HWND, item: &DRAWITEMSTRUCT) {
