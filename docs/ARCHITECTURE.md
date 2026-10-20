@@ -252,3 +252,18 @@ when the user requests the native tray diagnostic. It reports capture settings,
 actual outbound encoding sizes/FPS and qualityLimitationReason where available;
 no recurring stats timer, native capability, network upload or remote-quality
 claim is introduced. Cameras and screen shares may both appear in the report.
+
+## Stream stability follow-up (v0.3.2)
+
+The WebScreenShare adapter replaces its unconditional 3840x2160/120 capture and
+encoding profile with the selected, allowlisted Vencord resolution/FPS. The
+browser still negotiates actual source size and network-limited encoding; this
+does not rewrite Discord's profile label or promise the selected quality reaches
+viewers. Native audio failure preserves working browser video and reports the
+failure instead of stopping all capture tracks. The native diagnostic restores
+the window, immediately displays a selectable DOM report and bounds each sender
+stats request to three seconds. No background polling was added.
+
+The tray checks WebView2 ExecuteScript completion for a boolean acknowledgment;
+a missing diagnostic script now produces a native error instead of a silent no-op.
+No WebMessages or remote invocation permissions are enabled for this response.

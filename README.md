@@ -91,12 +91,16 @@ The game catalog attribution is in [vendor/GAMES-SOURCE.txt](vendor/GAMES-SOURCE
 The tray's **Diagnostic du stream** reports live local capture dimensions/FPS
 and outgoing WebRTC encoding dimensions/FPS when exposed by the browser. It also
 shows the encoder's quality limitation reason (for example bandwidth or CPU).
+The action restores the window and opens a selectable report.
 These values are separate from Discord's stream-profile label; they do not measure
 what a remote participant receives. The diagnostic runs only when requested.
 
 Discard corrects the pinned Vencord WebScreenShare module's 0.6 Mbit/s target to
 6 Mbit/s, retaining its existing 8 Mbit/s ceiling and browser bandwidth adaptation.
-This is a target, not a guaranteed bitrate or a forced resolution/FPS setting.
+This is a target, not a guaranteed bitrate. The encoder profile now follows the
+selected Vencord resolution/FPS rather than always advertising a 4K/120 ceiling.
+If optional native audio fails, browser video continues and a notification warns
+that native audio is unavailable. Real-call stability still requires validation.
 
 ### App updates
 

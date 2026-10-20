@@ -62,8 +62,13 @@
             if (video.getVideoTracks().every(track => track.readyState === "ended")) { audio.stop(); cleanup(); }
             return video;
         } catch (error) {
-            video.getTracks().forEach(track => track.stop());
             cleanup();
+            if (video.getVideoTracks().some(track => track.readyState === "live")) {
+                // Optional WASAPI/Worklet failure must not cancel working video.
+                console.error("Discard native audio unavailable:", error);
+                window.Vencord?.Webpack?.Common?.showToast?.({ text: "Audio natif indisponible : le partage video continue avec l'audio navigateur disponible.", variant: "failure" });
+                return video;
+            }
             throw error;
         }
     };

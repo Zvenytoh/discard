@@ -27,12 +27,13 @@ pub(crate) fn create(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
             "quit" => app.exit(0),
 
             "stream-diagnostic" => {
+                restore(app);
                 if let Some(window) = app.get_webview_window("main") {
                     if window
                         .url()
                         .is_ok_and(|url| crate::navigation::allowed(url.as_str()))
                     {
-                        if let Err(error) = window.eval("window.__discardStreamDiagnostic?.();") {
+                        if let Err(error) = platform::stream_diagnostic(&window) {
                             platform::show_error(&format!(
                                 "Stream diagnostic unavailable: {error}"
                             ));
