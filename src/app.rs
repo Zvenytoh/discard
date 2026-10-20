@@ -42,7 +42,7 @@ fn create_window(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             .title("Discard")
             .inner_size(1200.0, 800.0)
             .theme(Some(tauri::Theme::Dark))
-            .background_color(tauri::window::Color(30, 31, 34, 255))
+            .background_color(tauri::window::Color(36, 36, 41, 255))
             .on_navigation(|url| navigation::allowed(url.as_str()))
             .on_new_window(|_, _| NewWindowResponse::Deny)
             .on_download(|_, _| false)

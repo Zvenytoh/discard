@@ -113,7 +113,7 @@ fn theme() {
     // receives the exact value type/size; unsupported DWM attributes are optional.
     unsafe {
         let dark = BOOL(1);
-        let caption = COLORREF(0x00221f1e);
+        let caption = COLORREF(0x00292424); // Discord dark background: #242429 (COLORREF is BGR).
         let text = COLORREF(0x00f5f3f2);
         let _ = DwmSetWindowAttribute(
             state.hwnd,

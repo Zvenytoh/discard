@@ -47,7 +47,7 @@ service registry. Add a module only when it owns a concrete responsibility.
 
 `app::run() -> tauri::Result<()>` configures Tauri and creates `main` from Rust
 setup. It loads `https://discord.com/app` directly at 1200×800 logical pixels,
-with native decorations, a dark theme and opaque `#1E1F22` background.
+with native decorations, a dark theme and opaque `#242429` background.
 `tauri.conf.json` declares no initial windows; it grants no remote capabilities.
 No frontend development server or application-authored page script is involved.
 
@@ -115,7 +115,7 @@ are stored in GitHub Actions secrets, never in source; only the public key is em
 ## Appearance and background policy
 
 The existing coral artwork supplies native executable/bundle, taskbar/Dock,
-shortcut and installer icons. Windows 11 uses DWM caption `#1E1F22` and text
+shortcut and installer icons. Windows 11 uses DWM caption `#242429` and text
 `#F2F3F5`; Windows 10 falls back to supported native dark styling. macOS/Linux keep
 their native title-bar conventions, so exact caption colors depend on the system.
 
