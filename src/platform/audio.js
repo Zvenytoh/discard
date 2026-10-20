@@ -6,11 +6,17 @@
     if (!devices?.getDisplayMedia) return;
     const getDisplayMedia = devices.getDisplayMedia.bind(devices);
     devices.getDisplayMedia = async (...args) => {
-        const endpoint = window.__discardAudioEndpoint;
+        const options = args[0];
+        const audioRequested = options?.audio === true || (options?.audio && typeof options.audio === "object");
+        const picker = window.Vencord?.Settings?.plugins?.WebScreenShare;
+        const muted = picker?.enabled && picker.systemAudio;
+        const endpoint = audioRequested && !muted ? window.__discardAudioEndpoint : null;
         const video = await getDisplayMedia(...args);
         if (!endpoint || !video.getVideoTracks().length) return video;
-        let context, socket, node, timer, audio, output, rejectStart, pending;
-        let inFlight = false;
+        let context, worker, node, timer, audio, output, rejectStart;
+        let active = false;
+        let intentional = false;
+        let warned = false;
         let cleaned = false;
         const deadline = performance.now() + 10000;
         const startup = promise => new Promise((resolve, reject) => {
@@ -23,13 +29,35 @@
             cleaned = true;
             clearTimeout(timer);
             window.removeEventListener("pagehide", ended);
-            pending = undefined;
-            socket?.close();
-            if (node) { node.port.onmessage = null; node.port.close(); node.disconnect(); }
+            worker?.terminate();
+            node?.disconnect();
             output?.stream.getTracks().forEach(track => track.stop());
             if (context) void context.close().catch(error => console.error("Discard audio cleanup:", error));
         };
-        const ended = () => { rejectStart?.(new Error("Screen sharing stopped")); cleanup(); };
+        const warn = text => {
+            if (warned || intentional) return;
+            warned = true;
+            console.error("Discard native audio:", text);
+            const toast = window.Vencord?.Webpack?.Common?.showToast;
+            if (typeof toast === "function") {
+                try { toast({ text, variant: "failure" }); return; }
+                catch (error) { console.error("Discard audio notification:", error); }
+            }
+            // Native audio also works with Vencord disabled: retain visible errors.
+            const notice = document.createElement("div");
+            notice.setAttribute("role", "alert");
+            notice.textContent = text;
+            Object.assign(notice.style, { position: "fixed", right: "16px", bottom: "16px", maxWidth: "420px", padding: "12px", background: "#2b2d31", color: "#fff", borderRadius: "8px", zIndex: "2147483647" });
+            (document.body || document.documentElement).appendChild(notice);
+            setTimeout(() => notice.remove(), 10000);
+        };
+        const fail = error => {
+            if (cleaned) return;
+            rejectStart?.(error);
+            cleanup();
+            if (active) warn("Le son natif du partage s'est interrompu. Relance le partage pour le retablir ; la video continue.");
+        };
+        const ended = () => { intentional = true; rejectStart?.(new Error("Screen sharing stopped")); cleanup(); };
         for (const track of video.getVideoTracks()) {
             track.addEventListener("ended", ended, { once: true });
             const stopTrack = track.stop.bind(track);
@@ -44,32 +72,22 @@
             finally { URL.revokeObjectURL(worklet); }
             if (cleaned) throw new Error("Screen sharing stopped");
             node = new AudioWorkletNode(context, "discard-audio", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
-            // One port message in flight; keep only the newest pending packet on stalls.
-            const post = data => { inFlight = true; node.port.postMessage(data, [data]); };
-            node.port.onmessage = () => {
-                if (cleaned) return;
-                inFlight = false;
-                if (pending) { const data = pending; pending = undefined; post(data); }
-            };
-            node.onprocessorerror = () => { rejectStart?.(new Error("Native audio processor failed")); cleanup(); };
+            node.onprocessorerror = () => fail(new Error("Native audio processor failed"));
             output = context.createMediaStreamDestination();
             node.connect(output);
             await startup(context.resume());
             if (cleaned) throw new Error("Screen sharing stopped");
+            const transport = URL.createObjectURL(new Blob([__DISCARD_WORKER__], { type: "application/javascript" }));
+            try { worker = new Worker(transport); }
+            finally { URL.revokeObjectURL(transport); }
             await startup(new Promise((resolve, reject) => {
-                socket = new WebSocket(endpoint);
-                socket.binaryType = "arraybuffer";
-                socket.onmessage = ({ data }) => {
-                    if (cleaned) return;
-                    if (data === "ready") { resolve(); }
-                    else if (typeof data === "string" && data.startsWith("error:")) { reject(new Error(data.slice(6))); cleanup(); }
-                    else if (data instanceof ArrayBuffer && data.byteLength > 0 && data.byteLength <= 65536 && data.byteLength % 8 === 0) {
-                        if (inFlight) pending = data;
-                        else post(data);
-                    }
+                worker.onmessage = ({ data }) => {
+                    if (data.ready) resolve();
+                    else if (data.stopped) { intentional = true; reject(new Error("Native audio disabled")); cleanup(); }
+                    else if (data.error) { const error = new Error(data.error); reject(error); fail(error); }
                 };
-                socket.onerror = () => { reject(new Error("Native audio connection failed")); cleanup(); };
-                socket.onclose = () => { reject(new Error("Native audio stopped")); cleanup(); };
+                worker.onerror = event => { const error = new Error(event.message || "Native audio worker failed"); reject(error); fail(error); };
+                worker.postMessage({ endpoint, port: node.port }, [node.port]);
             }));
             if (cleaned) throw new Error("Native audio stopped");
             video.getAudioTracks().forEach(track => { video.removeTrack(track); track.stop(); });
@@ -77,8 +95,9 @@
             video.addTrack(audio);
             // stop() does not emit ended; Discord can stop the audio track directly.
             const stopAudio = audio.stop.bind(audio);
-            audio.stop = () => { stopAudio(); cleanup(); };
-            audio.addEventListener("ended", cleanup, { once: true });
+            audio.stop = () => { if (!cleaned) intentional = true; stopAudio(); cleanup(); };
+            audio.addEventListener("ended", ended, { once: true });
+            active = true;
             if (video.getVideoTracks().every(track => track.readyState === "ended")) { audio.stop(); cleanup(); }
             return video;
         } catch (error) {
@@ -86,7 +105,7 @@
             if (video.getVideoTracks().some(track => track.readyState === "live")) {
                 // Optional WASAPI/Worklet failure must not cancel working video.
                 console.error("Discard native audio unavailable:", error);
-                window.Vencord?.Webpack?.Common?.showToast?.({ text: "Audio natif indisponible : le partage video continue avec l'audio navigateur disponible.", variant: "failure" });
+                warn("Audio natif indisponible : le partage video continue avec l'audio navigateur disponible.");
                 return video;
             }
             throw error;

@@ -20,7 +20,7 @@ pub(crate) fn configure<'a>(
     };
     let builder = if config.vencord {
         let css = serde_json::to_string(include_str!("../vendor/vencord/browser.css"))?;
-        builder.initialization_script(format!(
+        builder.initialization_script(include_str!("stream.js")).initialization_script(format!(
             "(() => {{ if (window.top !== window || location.origin !== 'https://discord.com') return;\
              const bundledCss = {css};\
              Object.defineProperty(window, 'VencordNative', {{configurable:true, set(value) {{\

@@ -13,7 +13,7 @@ use windows::{
     Win32::{
         Foundation::{CloseHandle, FILETIME, HANDLE, HWND, LPARAM, WAIT_OBJECT_0},
         Security::Cryptography::{BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG},
-        System::Threading::*,
+        System::{Performance::*, Threading::*},
         UI::WindowsAndMessaging::*,
     },
 };
@@ -208,7 +208,7 @@ pub(crate) fn select(
 
 enum Frame {
     Ready,
-    Pcm(Vec<u8>),
+    Pcm(Vec<u8>, std::time::Instant),
     Failed(String),
 }
 // Kernel events support cross-thread signaling; the numeric handle is never exposed to the page.
@@ -302,7 +302,10 @@ async fn serve(
                 frame = receive.recv() => {
                     let (message, terminal) = match frame {
                         Some(Frame::Ready) => (Message::Text("ready".into()), false),
-                        Some(Frame::Pcm(bytes)) => (Message::Binary(bytes.into()), false),
+                        Some(Frame::Pcm(bytes, queued)) => {
+                            if queued.elapsed() > std::time::Duration::from_millis(250) { continue; }
+                            (Message::Binary(bytes.into()), false)
+                        },
                         Some(Frame::Failed(error)) => (Message::Text(format!("error:{error}").into()), true),
                         None => break,
                     };
@@ -317,6 +320,15 @@ async fn serve(
         stop.signal();
         if let Err(error) = capture.await {
             eprintln!("Audio worker failed: {error}");
+        }
+        if *cancel.borrow() {
+            // Tell the browser this was a native menu stop, not a capture fault.
+            let close = Message::Close(Some(tungstenite::protocol::CloseFrame {
+                code: tungstenite::protocol::frame::coding::CloseCode::Normal,
+                reason: "disabled".into(),
+            }));
+            let _ = tokio::time::timeout(std::time::Duration::from_millis(250), writer.send(close))
+                .await;
         }
         drop(writer);
         if *cancel.borrow() {
@@ -361,6 +373,14 @@ fn capture(
         }
     }
     let _apartment = Apartment;
+    let (mut counter, mut frequency) = (0, 0);
+    // SAFETY: both QPC outputs are local; this correlates WASAPI's QPC timestamps
+    // (100 ns units) with wall time for stale-packet rejection in the Worker.
+    unsafe {
+        QueryPerformanceFrequency(&mut frequency)?;
+        QueryPerformanceCounter(&mut counter)?;
+    }
+    let epoch_offset = epoch_ms() - counter as f64 * 1000.0 / frequency as f64;
     let mut client = AudioClient::new_application_loopback_client(pid, true)?;
     client.initialize_client(
         &WaveFormat::new(32, 32, &SampleType::Float, 48000, 2, None),
@@ -382,6 +402,7 @@ fn capture(
     let result = (|| -> Result<(), Box<dyn std::error::Error>> {
         send.blocking_send(Frame::Ready)?;
         let mut queue = VecDeque::new();
+        let mut captured_at = 0.0;
         loop {
             // SAFETY: all handles remain alive for this blocking wait. No polling
             // or native capture occurs when no browser share is connected.
@@ -398,14 +419,25 @@ fn capture(
             if status.0 != WAIT_OBJECT_0.0 + 2 {
                 return Err("Audio event wait failed".into());
             }
-            while read_packet(&capture, &mut queue)? {
+            while read_packet(
+                &capture,
+                &mut queue,
+                &mut captured_at,
+                epoch_offset,
+                frequency,
+            )? {
                 // Bound pending audio to ~170ms, preferring current samples.
                 if queue.len() > 8192 * 8 {
-                    queue.drain(..queue.len() - 8192 * 8);
+                    let dropped = queue.len() - 8192 * 8;
+                    queue.drain(..dropped);
+                    captured_at += dropped as f64 / 8.0 / 48.0;
                 }
                 while queue.len() >= 1024 * 8 {
-                    let chunk: Vec<u8> = queue.drain(..1024 * 8).collect();
-                    match send.try_send(Frame::Pcm(chunk)) {
+                    let mut chunk = Vec::with_capacity(8 + 1024 * 8);
+                    chunk.extend_from_slice(&captured_at.to_le_bytes());
+                    chunk.extend(queue.drain(..1024 * 8));
+                    captured_at += 1024.0 / 48.0;
+                    match send.try_send(Frame::Pcm(chunk, std::time::Instant::now())) {
                         Ok(()) | Err(mpsc::error::TrySendError::Full(_)) => {}
                         Err(mpsc::error::TrySendError::Closed(_)) => return Ok(()),
                     }
@@ -421,8 +453,14 @@ fn capture(
 fn read_packet(
     capture: &windows::Win32::Media::Audio::IAudioCaptureClient,
     queue: &mut VecDeque<u8>,
+    captured_at: &mut f64,
+    epoch_offset: f64,
+    frequency: i64,
 ) -> windows::core::Result<bool> {
-    use windows::Win32::Media::Audio::AUDCLNT_BUFFERFLAGS_SILENT;
+    use windows::Win32::Media::Audio::{
+        AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY, AUDCLNT_BUFFERFLAGS_SILENT,
+        AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR,
+    };
     // SAFETY: interface and packet stay on the owning capture MTA. GetBuffer
     // borrows frames until ReleaseBuffer. Silent packets need no data pointer;
     // non-silent data is copied before release, and only the latest 8192 frames
@@ -431,9 +469,23 @@ fn read_packet(
         if capture.GetNextPacketSize()? == 0 {
             return Ok(false);
         }
+        let mut received = 0;
+        QueryPerformanceCounter(&mut received)?;
         let (mut data, mut frames, mut flags) = (std::ptr::null_mut(), 0u32, 0u32);
-        capture.GetBuffer(&mut data, &mut frames, &mut flags, None, None)?;
+        let mut qpc = 0;
+        capture.GetBuffer(&mut data, &mut frames, &mut flags, None, Some(&mut qpc))?;
         let keep = frames.min(8192) as usize;
+        if flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY.0 as u32 != 0 || frames > 8192 {
+            queue.clear();
+        }
+        if queue.is_empty() {
+            *captured_at = if qpc == 0 || flags & AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR.0 as u32 != 0
+            {
+                epoch_offset + received as f64 * 1000.0 / frequency as f64 - keep as f64 / 48.0
+            } else {
+                epoch_offset + qpc as f64 / 10000.0 + (frames as usize - keep) as f64 / 48.0
+            };
+        }
         let copied = if flags & AUDCLNT_BUFFERFLAGS_SILENT.0 as u32 != 0 {
             queue.resize(queue.len() + keep * 8, 0);
             Ok(())
@@ -453,4 +505,12 @@ fn read_packet(
         released?;
         Ok(frames > 0)
     }
+}
+
+fn epoch_ms() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs_f64()
+        * 1000.0
 }

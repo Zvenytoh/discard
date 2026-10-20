@@ -30,11 +30,17 @@ pub(crate) fn configure(
     let builder = macos::configure(builder);
     #[cfg(windows)]
     let builder = builder.initialization_script(
-        include_str!("audio.js").replace(
-            "__DISCARD_WORKLET__",
-            &serde_json::to_string(include_str!("audio-worklet.js"))
-                .expect("static worklet serialization"),
-        ),
+        include_str!("audio.js")
+            .replace(
+                "__DISCARD_WORKLET__",
+                &serde_json::to_string(include_str!("audio-worklet.js"))
+                    .expect("static worklet serialization"),
+            )
+            .replace(
+                "__DISCARD_WORKER__",
+                &serde_json::to_string(include_str!("audio-worker.js"))
+                    .expect("static worker serialization"),
+            ),
     );
     // Native drag/drop events are unused; let Discord receive HTML file drops.
     builder.disable_drag_drop_handler()

@@ -238,36 +238,56 @@ share this trust boundary; the token does not isolate Vencord from Discord code.
 
 A connected share initializes WASAPI process-loopback on a worker MTA, verifies
 PID identity and captures 48 kHz stereo float PCM. It blocks on audio, target-exit
-and cancellation handles. At most four 1024-frame packets queue for delivery;
-the worklet ring is also bounded. The browser sends at most one unacknowledged
-MessagePort packet and retains only the newest pending packet during a stall.
-The worklet acknowledges after copying into its bounded ring; overflow drops
-old samples rather than accumulating delay. Every server write, including errors,
-is cancellable and has a two-second timeout. PCM travels as binary WebSocket
-frames, never video or JSON/base64 sample batches. getDisplayMedia retains the browser's video
-and attaches the native audio track. Its stop methods, system-ended events,
-navigation and native stop action close the channel and release capture. The
-normal path has no local listener or native recording until explicitly armed.
+and cancellation handles. A four-packet channel limits native delivery. Each
+1024-frame packet has an eight-byte little-endian f64 capture timestamp in epoch
+milliseconds, correlated from WASAPI QPC; timestamp errors fall back to receipt
+time. DATA_DISCONTINUITY clears partial queued samples. The server rejects packets
+queued longer than 250 ms and bounds every write, including errors and intentional
+close notifications. No privileged inbound audio command is added.
 
-The bridge uses neither Tauri invoke permissions nor WebMessages/host objects.
-No CSP is weakened to force the prototype to work. Real-call validation remains
-mandatory before treating application audio as production-ready; Windows capture
-availability does not prove Discord will publish or receive the attached track.
+The optional audio wrapper honors the per-share audio request and active Vencord
+mute preference. An explicitly armed share creates one disposable blob Worker and
+transfers the AudioWorklet MessagePort to it. Socket reception, timestamp age checks
+and bounded delivery no longer pass through Discord's page main thread. The Worker
+rejects capture data older than 250 ms and retains one unacknowledged packet plus
+only the newest pending packet. The worklet retains its bounded stereo ring.
+The age threshold is a delivery policy, not a measured end-to-end latency bound.
+
+Startup has one shared ten-second deadline and preserves live browser capture on
+failure. Successful native audio replaces the browser audio track. Unexpected
+post-start transport/processor failure warns once and keeps video alive; the
+stopped browser track is not falsely claimed to recover automatically. A deliberate
+native stop sends a normal close reason so it stays quiet. Stop, pagehide and
+failure terminate the Worker, disconnect output and close the context. No Worker,
+listener or WASAPI recording is created without an armed audio request.
+
+No CSP, remote capability or host-object restriction is weakened. Worker/blob CSP
+support, synchronization, clock drift and received media still require real-call
+acceptance. Timestamps reject old data; they do not synchronize audio with video
+or implement sample-clock drift compensation.
 
 ## Screen-share profile handling
 
-The pinned WebScreenShare plugin defines generous upper bounds before opening
-its picker; getDisplayMedia later applies the current resolution/FPS selection.
-Discard leaves those upper bounds intact. Replacing them with previously saved
-settings before the picker opened could restrict the next selection, so that
-local override is removed. Only the 600000 bit/s target correction to 6000000,
-bounded by the upstream ceiling, remains. Browser adaptation and codecs are
-unchanged; no fixed 16:9 dimensions are imposed by Discard.
+`src/stream.js` is installed before the pinned Vencord bundle captures
+getDisplayMedia. It receives the actual submitted picker dimensions/FPS, replacing
+inherited capture limits without forcing a 16:9 source. Only successful live
+capture publishes a profile; normal browser shares and disabled plugins bypass it.
+A stopped share clears its active profile, leaving upstream pre-picker bounds.
 
-The additional RTCPeerConnection proxy, sender tracking, diagnostic dialog, native
-ExecuteScript acknowledgment and tray command were removed at the user's request.
-Native audio retains its existing browser capture wrapper, timeout and fallback.
-No new media engine, background sampler or dependency is introduced.
+`src/mods.js` guards the ApplicationStreamingSettingsStore integration and syncs
+resolution/FPS/custom preset without changing sound preference or account features.
+It updates only the local stream's videoStreamParameters and asks the connection
+to refresh quality. The getGoliveMaxQuality adapter applies the live profile's
+actual width, capped source height and selected FPS, with resolution/FPS-dependent
+bitrate limits (target 2–24 Mbit/s, ceiling up to 32 Mbit/s, minimum 0.5 Mbit/s).
+Network/codec adaptation remains browser-managed. This is not a fixed encoder rate.
+
+Discord's own stream settings changes apply matching capture constraints through
+an event listener, not polling. One deferred refresh and STREAM_CREATE handle
+connection startup. Unsupported private-module shapes produce a compatibility
+warning; browser video is not discarded. The UI reflects the requested profile,
+not sampled receive-side FPS. The pinned upstream browser assets are unchanged;
+Electron-only plugins do not gain compatibility from these adapters.
 
 ## Single-instance and tray lifecycle (v0.3.3)
 

@@ -98,3 +98,11 @@ is restored. Unit/functional runs still require an explicit request.
 - v0.3.6 Windows release build and publication succeeded. Installer, portable,
   update signature, manifest and checksums are published; no install/call/runtime
   validation is implied. Native audio and moving-content acceptance remain open.
+
+## Implementation update: v0.3.8
+
+Stream-audit fixes and picker/Discord profile integration are implemented; see
+STREAM-AUDIT.md for source findings and remediation. The transport now uses an
+optional dedicated Worker and timestamps. Real-call moving-content quality,
+Worker/CSP support, A/V sync and clock drift remain acceptance gates. No account
+feature, private capability or Electron-only plugin support is fabricated.

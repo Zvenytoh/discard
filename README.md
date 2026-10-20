@@ -93,14 +93,25 @@ browser negotiates capture and encoding within those limits, adapting to motion,
 CPU capacity and network conditions. An unchanged desktop can produce fewer
 encoded frames than the configured FPS; that alone does not establish stuttering.
 
-Discard corrects the pinned Vencord module's 0.6 Mbit/s target to 6 Mbit/s while
-retaining the existing 8 Mbit/s ceiling and bandwidth adaptation. It does not cap
-the next share with a previously saved resolution/FPS profile. The additional
-WebRTC diagnostic wrapper and tray report have been removed.
+Discard connects the current Vencord picker profile to Discord's stream settings,
+video parameters and encoding limits. Discord's own quality menu also updates
+capture constraints. Source aspect ratio is preserved; changing from a lower to a
+higher profile does not inherit the previous share's capture limit. Bitrate targets
+scale with resolution/FPS, with network adaptation retained; these are limits,
+not guaranteed delivered FPS or quality. No diagnostic wrapper or report is added.
 
-Optional native audio has a shared 10-second startup deadline. Failure preserves
-working browser video and displays an audio warning. Real-call quality and latency
-still require acceptance testing; no fixed resolution/FPS or latency is promised.
+Optional native audio respects video-only shares and the Vencord mute choice.
+A dedicated Worker relays audio directly to the worklet, with bounded delivery,
+capture timestamps and stale-packet rejection. Startup has one shared ten-second
+deadline. Failure preserves browser video; unexpected failure after startup shows
+one warning, while a deliberate native-menu stop is quiet.
+
+WebScreenShare and WebScreenShareFixes remain the pinned browser plugins. Disabling
+them is respected. Discord's private stream modules can change: unavailable
+profile integration shows a compatibility warning and preserves browser capture.
+Plugins requiring Electron/native Discord modules are not supported by Tauri.
+Real-call video quality, synchronization and Worker/CSP compatibility still require
+acceptance checks; no fixed FPS, latency or complete official-client parity is claimed.
 
 ### Window and tray lifecycle
 
@@ -172,7 +183,9 @@ Treat engine data as private account/session information.
 
 All targets need Rust stable with `rustfmt` and `clippy`. The reviewed versions
 are Tauri **2.12.4**, tauri-build **2.7.3**, and tauri-cli **2.12.3**; the resolved
-Rust dependencies are committed in `Cargo.lock`. Node and npm are unnecessary.
+Rust dependencies are committed in `Cargo.lock`. Node and npm are unnecessary
+for building the app. Optional JavaScript regression cases use Node's built-in
+runner without npm dependencies.
 
 - **Windows:** MSVC Rust, Visual Studio C++ Build Tools with Windows SDK, and
   WebView2 Evergreen. MSVC is the shipped target.
