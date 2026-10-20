@@ -57,31 +57,36 @@ pub(crate) fn run() -> tauri::Result<()> {
 }
 
 fn create_window(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    let mut builder =
-        WebviewWindowBuilder::new(app, "main", WebviewUrl::External(navigation::HOME.parse()?))
-            .title("Discard")
-            .on_document_title_changed(|window, title| {
-                let title = title
-                    .trim_end_matches(" | Discord")
-                    .trim_end_matches(" - Discord");
-                let title = if title.is_empty() || title == "Discord" {
-                    "Amis"
-                } else {
-                    title
-                };
-                if let Err(error) = window.set_title(&title.chars().take(160).collect::<String>()) {
-                    eprintln!("Could not update window title: {error}");
-                }
-            })
-            .inner_size(1200.0, 800.0)
-            .theme(Some(tauri::Theme::Dark))
-            .background_color(tauri::window::Color(36, 36, 41, 255))
-            .on_navigation(|url| navigation::allowed(url.as_str()))
-            .on_new_window(|_, _| NewWindowResponse::Deny)
-            .on_download(|_, _| false)
-            // Wry otherwise auto-grants media capture at the WKWebView origin layer.
-            // Default explicitly requests normal engine permission behavior (Prompt on macOS).
-            .on_permission_request(|_, _| PermissionResponse::Default);
+    // Windows configures native drag regions before the first Discord navigation.
+    let start = if cfg!(windows) {
+        "about:blank"
+    } else {
+        navigation::HOME
+    };
+    let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(start.parse()?))
+        .title("Discard")
+        .on_document_title_changed(|window, title| {
+            let title = title
+                .trim_end_matches(" | Discord")
+                .trim_end_matches(" - Discord");
+            let title = if title.is_empty() || title == "Discord" {
+                "Amis"
+            } else {
+                title
+            };
+            if let Err(error) = window.set_title(&title.chars().take(160).collect::<String>()) {
+                eprintln!("Could not update window title: {error}");
+            }
+        })
+        .inner_size(1200.0, 800.0)
+        .theme(Some(tauri::Theme::Dark))
+        .background_color(tauri::window::Color(36, 36, 41, 255))
+        .on_navigation(|url| navigation::allowed(url.as_str()))
+        .on_new_window(|_, _| NewWindowResponse::Deny)
+        .on_download(|_, _| false)
+        // Wry otherwise auto-grants media capture at the WKWebView origin layer.
+        // Default explicitly requests normal engine permission behavior (Prompt on macOS).
+        .on_permission_request(|_, _| PermissionResponse::Default);
 
     if let Some(directory) = profile::directory(app.handle())? {
         builder = builder.data_directory(directory);

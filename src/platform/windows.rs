@@ -7,15 +7,17 @@ use std::{
 };
 use tauri::Manager;
 use webview2_com::{
-    IsDocumentPlayingAudioChangedEventHandler,
+    take_pwstr, IsDocumentPlayingAudioChangedEventHandler,
     Microsoft::Web::WebView2::Win32::{
-        ICoreWebView2Controller, ICoreWebView2_19, ICoreWebView2_8,
-        COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW as LOW,
+        ICoreWebView2, ICoreWebView2Controller, ICoreWebView2Settings9, ICoreWebView2_19,
+        ICoreWebView2_8, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW as LOW,
         COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL as NORMAL,
+        COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC,
     },
+    NewWindowRequestedEventHandler,
 };
 use windows::{
-    core::{w, Interface, Result, BOOL},
+    core::{w, Interface, Result, BOOL, PWSTR},
     Win32::{
         Foundation::{COLORREF, HWND},
         Graphics::Dwm::{
@@ -23,8 +25,8 @@ use windows::{
             DWMWA_USE_IMMERSIVE_DARK_MODE,
         },
         UI::{
-            Shell::SetCurrentProcessExplicitAppUserModelID,
-            WindowsAndMessaging::{GetForegroundWindow, IsIconic, IsWindowVisible},
+            Shell::{SetCurrentProcessExplicitAppUserModelID, ShellExecuteW},
+            WindowsAndMessaging::{GetForegroundWindow, IsIconic, IsWindowVisible, SW_SHOWNORMAL},
         },
     },
 };
@@ -38,6 +40,7 @@ struct Background {
     controller: ICoreWebView2Controller,
     memory: Option<ICoreWebView2_19>,
     audio: Option<(ICoreWebView2_8, i64)>,
+    help: (ICoreWebView2, i64),
     memory_enabled: Cell<bool>,
     visible: Cell<Option<bool>>,
     memory_level: Cell<Option<i32>>,
@@ -45,6 +48,10 @@ struct Background {
 
 impl Drop for Background {
     fn drop(&mut self) {
+        // SAFETY: subscription and engine are released on their owning UI STA.
+        if let Err(error) = unsafe { self.help.0.remove_NewWindowRequested(self.help.1) } {
+            eprintln!("Could not remove help handler: {error}");
+        }
         if let Some((audio, token)) = &self.audio {
             // SAFETY: native state and its subscription are released on the owning UI STA.
             if let Err(error) = unsafe { audio.remove_IsDocumentPlayingAudioChanged(*token) } {
@@ -58,15 +65,15 @@ fn current() -> Option<Rc<Background>> {
     BACKGROUND.with(|slot| slot.borrow().clone())
 }
 
-pub(super) fn open_inbox() {
-    let Some(state) = current() else { return };
-    // SAFETY: invoked only by this window's native caption on its owning STA.
-    // This one-shot DOM click uses the website's own inbox; no bridge is exposed.
-    unsafe {
-        let result = state.controller.CoreWebView2().and_then(|web| web.ExecuteScript(
-            w!("(()=>{const b=document.querySelector('[aria-label=\"Boîte de réception\"], [aria-label=\"Inbox\"]');if(b)b.click()})()"), None));
-        if let Err(error) = result {
-            eprintln!("Could not open Discord inbox: {error}");
+pub(super) fn focus_content() {
+    if let Some(state) = current() {
+        // SAFETY: only called by native window controls on the owning UI STA.
+        if let Err(error) = unsafe {
+            state
+                .controller
+                .MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC)
+        } {
+            eprintln!("Could not return focus to Discord: {error}");
         }
     }
 }
@@ -86,6 +93,48 @@ fn initialize(controller: ICoreWebView2Controller, hwnd: HWND) -> Result<()> {
         // This host has no web-to-native app API, including Tauri IPC.
         settings.SetAreHostObjectsAllowed(false)?;
         settings.SetIsWebMessageEnabled(false)?;
+        settings
+            .cast::<ICoreWebView2Settings9>()?
+            .SetIsNonClientRegionSupportEnabled(true)?;
+        let mut help_token = 0;
+        web.add_NewWindowRequested(
+            &NewWindowRequestedEventHandler::create(Box::new(|_, args| {
+                let Some(args) = args else { return Ok(()) };
+                let mut initiated = BOOL(0);
+                args.IsUserInitiated(&mut initiated)?;
+                if !initiated.as_bool() {
+                    return Ok(());
+                }
+                let mut uri = PWSTR::null();
+                args.Uri(&mut uri)?;
+                let uri = take_pwstr(uri);
+                let Ok(url) = url::Url::parse(&uri) else {
+                    return Ok(());
+                };
+                if url.scheme() == "https"
+                    && url.host_str() == Some("support.discord.com")
+                    && url.port_or_known_default() == Some(443)
+                    && url.username().is_empty()
+                    && url.password().is_none()
+                {
+                    args.SetHandled(true)?;
+                    // Open only this fixed URL: never forward page-provided data to the browser.
+                    let result = ShellExecuteW(
+                        None,
+                        w!("open"),
+                        w!("https://support.discord.com/"),
+                        None,
+                        None,
+                        SW_SHOWNORMAL,
+                    );
+                    if result.0 as isize <= 32 {
+                        eprintln!("Could not open Discord support");
+                    }
+                }
+                Ok(())
+            })),
+            &mut help_token,
+        )?;
         let audio = web.cast::<ICoreWebView2_8>().ok().and_then(|audio| {
             let mut token = 0;
             match audio.add_IsDocumentPlayingAudioChanged(
@@ -109,6 +158,7 @@ fn initialize(controller: ICoreWebView2Controller, hwnd: HWND) -> Result<()> {
             memory_enabled: Cell::new(audio.is_some() && memory.is_some()),
             memory,
             audio,
+            help: (web, help_token),
             visible: Cell::new(None),
             memory_level: Cell::new(None),
         }
@@ -116,6 +166,16 @@ fn initialize(controller: ICoreWebView2Controller, hwnd: HWND) -> Result<()> {
     let previous = BACKGROUND.with(|slot| slot.borrow_mut().replace(Rc::new(state)));
     drop(previous);
     theme();
+    // SAFETY: native drag-region support and the security settings are configured
+    // before this first real navigation, on the controller's owning STA.
+    unsafe {
+        if let Some(state) = current() {
+            state
+                .controller
+                .CoreWebView2()?
+                .Navigate(&windows::core::HSTRING::from(crate::navigation::HOME))?;
+        }
+    }
     apply();
     Ok(())
 }

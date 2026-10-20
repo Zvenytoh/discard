@@ -1,12 +1,9 @@
-//! Windows non-client title bar: native sizing, dragging and system commands.
-//! No extra browser surface or remote-content privileges.
-
-use std::cell::Cell;
-use std::mem::size_of;
+//! Real Discord header with native, accessible window buttons; no page bridge.
+use std::{cell::Cell, mem::size_of};
 use windows::{
     core::w,
     Win32::{
-        Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM},
+        Foundation::{COLORREF, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM},
         Graphics::{
             Dwm::{
                 DwmSetWindowAttribute, DWMNCRP_DISABLED, DWMNCRP_USEWINDOWSTYLE,
@@ -15,60 +12,73 @@ use windows::{
             Gdi::*,
         },
         UI::{
-            HiDpi::{GetDpiForWindow, GetSystemMetricsForDpi},
-            Input::KeyboardAndMouse::{ReleaseCapture, SetCapture},
-            Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass, ShellExecuteW},
+            Controls::{
+                DRAWITEMSTRUCT, ODS_FOCUS, ODS_NOFOCUSRECT, ODS_SELECTED, ODT_BUTTON, WM_MOUSELEAVE,
+            },
+            HiDpi::GetDpiForWindow,
+            Input::KeyboardAndMouse::{TrackMouseEvent, TME_LEAVE, TRACKMOUSEEVENT},
+            Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass},
             WindowsAndMessaging::*,
         },
     },
 };
-
-const SUBCLASS: usize = 0x44495343;
-
-// Keep one caption row: Discord's own top bar otherwise duplicates our native
-// controls. Static CSS also matches later SPA renders without an observer/timer.
-pub(super) const PAGE_STYLE: &str = r#"
-(() => {
-    if (window.top !== window) return;
-    const install = () => {
-        if (document.getElementById('discard-single-titlebar')) return;
-        const style = document.createElement('style');
-        style.id = 'discard-single-titlebar';
-        style.textContent = `
-            #app-mount div[class^="base_"]:has(> div[class^="bar_"]) {
-                grid-template-rows: [top] 0px [titleBarEnd] min-content [noticeEnd] 1fr [contentEnd] min-content [end] !important;
-            }
-            #app-mount div[class^="base_"] > div[class^="bar_"] {
-                display: none !important;
-            }
-        `;
-        document.documentElement.appendChild(style);
-    };
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', install, { once: true });
-    } else {
-        install();
-    }
-})();
-"#;
-thread_local! {
-    // This adapter owns exactly one top-level window, on the UI thread.
-    static PRESSED: Cell<u32> = const { Cell::new(0) };
-}
+const HOOK: usize = 0x44495343;
+const STRIP: i32 = 0x4449;
+const MIN: i32 = 101;
+const MAX: i32 = 102;
+const CLOSE: i32 = 103;
+pub(super) const PAGE_STYLE: &str = include_str!("titlebar.js");
+thread_local! { static HOVER:Cell<i32>=const{Cell::new(0)}; }
 
 pub(super) fn attach(window: &tauri::WebviewWindow) -> Result<(), Box<dyn std::error::Error>> {
     let hwnd = window.hwnd()?;
-    // SAFETY: called on Tauri's owning UI thread with its live HWND. The subclass
-    // holds no pointers/state and removes itself at WM_NCDESTROY.
+    // SAFETY: setup and all callbacks run on this HWND's UI thread. Native
+    // children belong to it and die with it. Hooks store no borrowed pointers.
     unsafe {
-        SetWindowSubclass(hwnd, Some(procedure), SUBCLASS, 0).ok()?;
-        let result = DwmSetWindowAttribute(
-            hwnd,
-            DWMWA_NCRENDERING_POLICY,
-            &DWMNCRP_DISABLED as *const _ as _,
-            size_of::<i32>() as u32,
-        )
-        .and_then(|()| {
+        let strip = CreateWindowExW(
+            WINDOW_EX_STYLE::default(),
+            w!("STATIC"),
+            w!("Discard controls"),
+            WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
+            0,
+            0,
+            132,
+            32,
+            Some(hwnd),
+            Some(HMENU(STRIP as *mut _)),
+            None,
+            None,
+        )?;
+        let result = (|| -> windows::core::Result<()> {
+            SetWindowSubclass(strip, Some(container_proc), HOOK, 0).ok()?;
+            for (id, name) in [
+                (MIN, w!("Réduire")),
+                (MAX, w!("Agrandir ou restaurer")),
+                (CLOSE, w!("Fermer vers le tray")),
+            ] {
+                let button = CreateWindowExW(
+                    WINDOW_EX_STYLE::default(),
+                    w!("BUTTON"),
+                    name,
+                    WS_CHILD | WS_VISIBLE | WS_TABSTOP | WINDOW_STYLE(BS_OWNERDRAW as u32),
+                    0,
+                    0,
+                    44,
+                    32,
+                    Some(strip),
+                    Some(HMENU(id as *mut _)),
+                    None,
+                    None,
+                )?;
+                SetWindowSubclass(button, Some(button_proc), HOOK, 0).ok()?;
+            }
+            SetWindowSubclass(hwnd, Some(frame_proc), HOOK, 0).ok()?;
+            DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_NCRENDERING_POLICY,
+                &DWMNCRP_DISABLED as *const _ as _,
+                size_of::<i32>() as u32,
+            )?;
             SetWindowPos(
                 hwnd,
                 None,
@@ -77,10 +87,13 @@ pub(super) fn attach(window: &tauri::WebviewWindow) -> Result<(), Box<dyn std::e
                 0,
                 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
-            )
-        });
+            )?;
+            layout(hwnd);
+            Ok(())
+        })();
         if let Err(error) = result {
-            RemoveWindowSubclass(hwnd, Some(procedure), SUBCLASS).ok()?;
+            let _ = RemoveWindowSubclass(hwnd, Some(frame_proc), HOOK);
+            let _ = DestroyWindow(strip);
             let _ = DwmSetWindowAttribute(
                 hwnd,
                 DWMWA_NCRENDERING_POLICY,
@@ -102,19 +115,18 @@ pub(super) fn attach(window: &tauri::WebviewWindow) -> Result<(), Box<dyn std::e
     Ok(())
 }
 
-// SAFETY: Windows invokes this only for the registered HWND on its owning UI
-// thread. Message-specific pointers below are valid only during the call; no
-// borrowed pointer, device context or GDI object escapes the callback.
-unsafe extern "system" fn procedure(
+// SAFETY: registered only on our live UI-thread HWNDs. Windows message pointers
+// remain borrowed during synchronous callbacks; default procedures keep ownership.
+unsafe extern "system" fn frame_proc(
     hwnd: HWND,
-    message: u32,
+    msg: u32,
     wp: WPARAM,
     lp: LPARAM,
     id: usize,
     _: usize,
 ) -> LRESULT {
     unsafe {
-        match message {
+        match msg {
             WM_NCCALCSIZE => {
                 let rect = if wp.0 != 0 {
                     std::ptr::addr_of_mut!((*(lp.0 as *mut NCCALCSIZE_PARAMS)).rgrc[0])
@@ -122,263 +134,276 @@ unsafe extern "system" fn procedure(
                     lp.0 as *mut RECT
                 };
                 let original = *rect;
-                DefSubclassProc(hwnd, message, wp, lp);
-                let rect = &mut *rect;
-                let border = rect.left - original.left;
-                rect.top = original.top + border + scale(hwnd, 32);
+                DefSubclassProc(hwnd, msg, wp, lp);
+                (*rect).top = original.top + ((*rect).left - original.left);
                 return LRESULT(0);
             }
-            WM_NCHITTEST => {
-                let mut bounds = RECT::default();
-                if GetWindowRect(hwnd, &mut bounds).is_ok() {
-                    let x = (lp.0 as i16) as i32 - bounds.left;
-                    let y = ((lp.0 >> 16) as i16) as i32 - bounds.top;
-                    let border = border(hwnd);
-                    let right = bounds.right - bounds.left - border;
-                    if x >= border && x < right && y >= border && y < border + scale(hwnd, 32) {
-                        let button = scale(hwnd, 44);
-                        let hit = if x >= right - button {
-                            HTCLOSE
-                        } else if x >= right - 2 * button {
-                            HTMAXBUTTON
-                        } else if x >= right - 3 * button {
-                            HTMINBUTTON
-                        } else if x >= right - 4 * button {
-                            HTHELP
-                        } else if x >= right - 5 * button {
-                            HTOBJECT
-                        } else {
-                            HTCAPTION
-                        };
-                        return LRESULT(hit as isize);
-                    }
+            WM_SIZE | WM_DPICHANGED => {
+                let result = DefSubclassProc(hwnd, msg, wp, lp);
+                layout(hwnd);
+                return result;
+            }
+            WM_NCPAINT | WM_NCACTIVATE => {
+                paint_frame(hwnd);
+                return LRESULT(1);
+            }
+            WM_NCDESTROY => {
+                let _ = RemoveWindowSubclass(hwnd, Some(frame_proc), id);
+            }
+            _ => {}
+        }
+        DefSubclassProc(hwnd, msg, wp, lp)
+    }
+}
+
+unsafe extern "system" fn container_proc(
+    hwnd: HWND,
+    msg: u32,
+    wp: WPARAM,
+    lp: LPARAM,
+    id: usize,
+    _: usize,
+) -> LRESULT {
+    unsafe {
+        match msg {
+            WM_DRAWITEM if lp.0 != 0 => {
+                let item = &*(lp.0 as *const DRAWITEMSTRUCT);
+                if item.CtlType == ODT_BUTTON {
+                    paint_button(hwnd, item);
+                    return LRESULT(1);
                 }
             }
-            WM_NCLBUTTONDOWN => {
-                if matches!(
-                    wp.0 as u32,
-                    HTCLOSE | HTMINBUTTON | HTMAXBUTTON | HTHELP | HTOBJECT
-                ) {
-                    PRESSED.set(wp.0 as u32);
-                    SetCapture(hwnd);
-                    return LRESULT(0);
-                }
-            }
-            WM_LBUTTONUP if PRESSED.get() != 0 => {
-                let pressed = PRESSED.replace(0);
-                let _ = ReleaseCapture();
-                let mut cursor = windows::Win32::Foundation::POINT::default();
-                if GetCursorPos(&mut cursor).is_err() {
-                    return LRESULT(0);
-                }
-                let position = ((cursor.y as u32 & 0xffff) << 16) | (cursor.x as u32 & 0xffff);
-                let hit = SendMessageW(
-                    hwnd,
-                    WM_NCHITTEST,
-                    Some(WPARAM(0)),
-                    Some(LPARAM(position as isize)),
-                )
-                .0 as u32;
-                if hit != pressed {
-                    return LRESULT(0);
-                }
-                if pressed == HTOBJECT {
-                    super::windows::open_inbox();
-                    return LRESULT(0);
-                }
-                if pressed == HTHELP {
-                    let result = ShellExecuteW(
-                        Some(hwnd),
-                        w!("open"),
-                        w!("https://support.discord.com/"),
-                        None,
-                        None,
-                        SW_SHOWNORMAL,
-                    );
-                    if result.0 as isize <= 32 {
-                        eprintln!("Could not open Discord help");
-                    }
-                    return LRESULT(0);
-                }
-                let command = match pressed {
-                    HTCLOSE => Some(SC_CLOSE),
-                    HTMINBUTTON => Some(SC_MINIMIZE),
-                    HTMAXBUTTON => Some(if IsZoomed(hwnd).as_bool() {
+            WM_COMMAND if (wp.0 >> 16) as u32 == BN_CLICKED => {
+                let root = GetAncestor(hwnd, GA_ROOT);
+                let command = match (wp.0 & 0xffff) as i32 {
+                    MIN => Some(SC_MINIMIZE),
+                    MAX => Some(if IsZoomed(root).as_bool() {
                         SC_RESTORE
                     } else {
                         SC_MAXIMIZE
                     }),
+                    CLOSE => Some(SC_CLOSE),
                     _ => None,
                 };
                 if let Some(command) = command {
                     if let Err(error) = PostMessageW(
-                        Some(hwnd),
+                        Some(root),
                         WM_SYSCOMMAND,
                         WPARAM(command as usize),
                         LPARAM(0),
                     ) {
-                        eprintln!("Window command failed: {error}");
+                        eprintln!("Window control failed: {error}");
+                    } else if matches!(command, SC_MAXIMIZE | SC_RESTORE) {
+                        super::windows::focus_content();
                     }
                     return LRESULT(0);
                 }
             }
-            WM_CAPTURECHANGED => {
-                PRESSED.set(0);
-            }
-            WM_NCPAINT | WM_NCACTIVATE => {
-                paint(hwnd);
+            WM_ERASEBKGND => {
                 return LRESULT(1);
             }
-            WM_SETTEXT | WM_SIZE | WM_DPICHANGED => {
-                let result = DefSubclassProc(hwnd, message, wp, lp);
-                paint(hwnd);
-                return result;
-            }
             WM_NCDESTROY => {
-                let _ = RemoveWindowSubclass(hwnd, Some(procedure), id);
+                let _ = RemoveWindowSubclass(hwnd, Some(container_proc), id);
             }
             _ => {}
         }
-        DefSubclassProc(hwnd, message, wp, lp)
+        DefSubclassProc(hwnd, msg, wp, lp)
     }
 }
 
+unsafe extern "system" fn button_proc(
+    hwnd: HWND,
+    msg: u32,
+    wp: WPARAM,
+    lp: LPARAM,
+    id: usize,
+    _: usize,
+) -> LRESULT {
+    unsafe {
+        let control = GetDlgCtrlID(hwnd);
+        match msg {
+            WM_MOUSEMOVE if HOVER.get() != control => {
+                HOVER.set(control);
+                let mut tracking = TRACKMOUSEEVENT {
+                    cbSize: size_of::<TRACKMOUSEEVENT>() as u32,
+                    dwFlags: TME_LEAVE,
+                    hwndTrack: hwnd,
+                    dwHoverTime: 0,
+                };
+                if let Err(error) = TrackMouseEvent(&mut tracking) {
+                    eprintln!("Caption hover tracking failed: {error}");
+                }
+                let _ = InvalidateRect(Some(hwnd), None, false);
+            }
+            WM_MOUSELEAVE => {
+                if HOVER.get() == control {
+                    HOVER.set(0);
+                }
+                let _ = InvalidateRect(Some(hwnd), None, false);
+            }
+            WM_NCDESTROY => {
+                if HOVER.get() == control {
+                    HOVER.set(0);
+                }
+                let _ = RemoveWindowSubclass(hwnd, Some(button_proc), id);
+            }
+            _ => {}
+        }
+        DefSubclassProc(hwnd, msg, wp, lp)
+    }
+}
 unsafe fn scale(hwnd: HWND, value: i32) -> i32 {
-    // SAFETY: caller holds the live UI-thread HWND.
-    unsafe { value * GetDpiForWindow(hwnd) as i32 / 96 }
+    // SAFETY: caller supplies this thread's live HWND.
+    unsafe { (value * GetDpiForWindow(hwnd) as i32 + 48) / 96 }
 }
-
-unsafe fn border(hwnd: HWND) -> i32 {
-    // SAFETY: caller holds the live UI-thread HWND; metrics are queried for its DPI.
+unsafe fn layout(hwnd: HWND) {
+    // SAFETY: all native child IDs and handles belong to this UI thread.
     unsafe {
-        let dpi = GetDpiForWindow(hwnd);
-        GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi)
+        let Ok(strip) = GetDlgItem(Some(hwnd), STRIP) else {
+            return;
+        };
+        let mut rect = RECT::default();
+        if GetClientRect(hwnd, &mut rect).is_err() {
+            return;
+        }
+        let width = scale(hwnd, 44);
+        let height = scale(hwnd, 32);
+        if let Err(error) = SetWindowPos(
+            strip,
+            Some(HWND_TOP),
+            (rect.right - 3 * width).max(0),
+            0,
+            3 * width,
+            height,
+            SWP_NOACTIVATE,
+        ) {
+            eprintln!("Could not place window controls: {error}");
+        }
+        for (index, id) in [MIN, MAX, CLOSE].into_iter().enumerate() {
+            if let Ok(button) = GetDlgItem(Some(strip), id) {
+                let _ = SetWindowPos(
+                    button,
+                    None,
+                    index as i32 * width,
+                    0,
+                    width,
+                    height,
+                    SWP_NOZORDER | SWP_NOACTIVATE,
+                );
+                let _ = InvalidateRect(Some(button), None, false);
+            }
+        }
     }
 }
-
-unsafe fn paint(hwnd: HWND) {
-    // SAFETY: all native handles are used synchronously on their owning thread.
-    // The DC is released and every created/selected GDI resource is restored.
+unsafe fn fill(dc: HDC, rect: &RECT, color: u32) {
+    // SAFETY: the temporary brush is not selected and is deleted synchronously.
     unsafe {
-        let mut bounds = RECT::default();
-        if GetWindowRect(hwnd, &mut bounds).is_err() {
+        let brush = CreateSolidBrush(COLORREF(color));
+        FillRect(dc, rect, brush);
+        let _ = DeleteObject(brush.into());
+    }
+}
+unsafe fn paint_frame(hwnd: HWND) {
+    // SAFETY: client is excluded, and every acquired DC is released here.
+    unsafe {
+        let mut outer = RECT::default();
+        let mut client = RECT::default();
+        let mut origin = POINT::default();
+        if GetWindowRect(hwnd, &mut outer).is_err() || GetClientRect(hwnd, &mut client).is_err() {
+            return;
+        }
+        if !ClientToScreen(hwnd, &mut origin).as_bool() {
             return;
         }
         let dc = GetWindowDC(Some(hwnd));
         if dc.is_invalid() {
             return;
         }
-        let border = border(hwnd);
-        let width = bounds.right - bounds.left;
-        let mut bar = RECT {
-            left: 0,
-            top: 0,
-            right: width,
-            bottom: border + scale(hwnd, 32),
-        };
-        let brush = CreateSolidBrush(COLORREF(0x00141212)); // screenshot: #121214
-        let height = bounds.bottom - bounds.top;
-        ExcludeClipRect(
+        let x = origin.x - outer.left;
+        let y = origin.y - outer.top;
+        ExcludeClipRect(dc, x, y, x + client.right, y + client.bottom);
+        fill(
             dc,
-            border,
-            border + scale(hwnd, 32),
-            width - border,
-            height - border,
+            &RECT {
+                left: 0,
+                top: 0,
+                right: outer.right - outer.left,
+                bottom: outer.bottom - outer.top,
+            },
+            0x141212,
         );
-        let frame = RECT {
-            left: 0,
-            top: 0,
-            right: width,
-            bottom: height,
+        ReleaseDC(Some(hwnd), dc);
+    }
+}
+unsafe fn paint_button(container: HWND, item: &DRAWITEMSTRUCT) {
+    // SAFETY: DRAWITEMSTRUCT/DC are borrowed only for WM_DRAWITEM; the selected
+    // GDI pen is restored before deletion. Native BUTTON owns press/focus input.
+    unsafe {
+        let hot = HOVER.get() == item.CtlID as i32;
+        let pressed = item.itemState.0 & ODS_SELECTED.0 != 0;
+        let close = item.CtlID as i32 == CLOSE;
+        let bg = match (close, pressed, hot) {
+            (true, true, _) => 0x332db9,
+            (true, false, true) => 0x3c37da,
+            (_, true, _) => 0x433c3c,
+            (_, false, true) => 0x3b3535,
+            _ => 0x141212,
         };
-        FillRect(dc, &frame, brush);
-        let _ = DeleteObject(brush.into());
-        SetBkMode(dc, TRANSPARENT);
-        SetTextColor(dc, COLORREF(0x00dedede));
-        let font = CreateFontW(
-            -scale(hwnd, 13),
-            0,
-            0,
-            0,
-            500,
-            0,
-            0,
-            0,
-            DEFAULT_CHARSET,
-            OUT_DEFAULT_PRECIS,
-            CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY,
-            0,
-            w!("Segoe UI"),
-        );
-        if font.is_invalid() {
-            ReleaseDC(Some(hwnd), dc);
+        fill(item.hDC, &item.rcItem, bg);
+        let color = if close && (hot || pressed) {
+            0xffffff
+        } else if hot || pressed {
+            0xe1dedb
+        } else {
+            0x777372
+        };
+        let pen = CreatePen(PS_SOLID, scale(container, 1).max(1), COLORREF(color));
+        if pen.is_invalid() {
             return;
         }
-        let old = SelectObject(dc, font.into());
-        bar.top = border;
-        bar.left = border + 5 * scale(hwnd, 44);
-        bar.right = width - border - 5 * scale(hwnd, 44);
-        let mut title = [0u16; 256];
-        let length = GetWindowTextW(hwnd, &mut title) as usize;
-        DrawTextW(
-            dc,
-            &mut title[..length],
-            &mut bar,
-            DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX,
-        );
-        let icons = CreateFontW(
-            -scale(hwnd, 12),
-            0,
-            0,
-            0,
-            400,
-            0,
-            0,
-            0,
-            DEFAULT_CHARSET,
-            OUT_DEFAULT_PRECIS,
-            CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY,
-            0,
-            w!("Segoe MDL2 Assets"),
-        );
-        if !icons.is_invalid() {
-            SelectObject(dc, icons.into());
+        let old = SelectObject(item.hDC, pen.into());
+        let cx = (item.rcItem.left + item.rcItem.right) / 2;
+        let cy = (item.rcItem.top + item.rcItem.bottom) / 2;
+        let h = scale(container, 5);
+        let line = |points: &[(i32, i32)]| {
+            let points: Vec<POINT> = points
+                .iter()
+                .map(|&(x, y)| POINT {
+                    x: cx + x,
+                    y: cy + y,
+                })
+                .collect();
+            let _ = Polyline(item.hDC, &points);
+        };
+        match item.CtlID as i32 {
+            MIN => line(&[(-h, 0), (h + 1, 0)]),
+            MAX if IsZoomed(GetAncestor(container, GA_ROOT)).as_bool() => {
+                let d = scale(container, 2);
+                line(&[(-h + d, -h), (h, -h), (h, h - d)]);
+                line(&[
+                    (-h, -h + d),
+                    (h - d, -h + d),
+                    (h - d, h),
+                    (-h, h),
+                    (-h, -h + d),
+                ]);
+            }
+            MAX => line(&[(-h, -h), (h, -h), (h, h), (-h, h), (-h, -h)]),
+            CLOSE => {
+                line(&[(-h, -h), (h + 1, h + 1)]);
+                line(&[(-h, h), (h + 1, -h - 1)]);
+            }
+            _ => {}
         }
-        for (index, label) in [
-            "\u{E715}",
-            "\u{E897}",
-            "\u{E921}",
-            if IsZoomed(hwnd).as_bool() {
-                "\u{E923}"
-            } else {
-                "\u{E922}"
-            },
-            "\u{E8BB}",
-        ]
-        .iter()
-        .enumerate()
-        {
-            let mut rect = RECT {
-                left: width - border - (5 - index as i32) * scale(hwnd, 44),
-                right: width - border - (4 - index as i32) * scale(hwnd, 44),
-                top: border,
-                bottom: border + scale(hwnd, 32),
-            };
-            let mut text: Vec<u16> = label.encode_utf16().collect();
-            DrawTextW(
-                dc,
-                &mut text,
-                &mut rect,
-                DT_CENTER | DT_VCENTER | DT_SINGLELINE,
-            );
+        SelectObject(item.hDC, old);
+        let _ = DeleteObject(pen.into());
+        if item.itemState.0 & ODS_FOCUS.0 != 0 && item.itemState.0 & ODS_NOFOCUSRECT.0 == 0 {
+            let mut rect = item.rcItem;
+            rect.left += 2;
+            rect.top += 2;
+            rect.right -= 2;
+            rect.bottom -= 2;
+            let _ = DrawFocusRect(item.hDC, &rect);
         }
-        SelectObject(dc, old);
-        if !icons.is_invalid() {
-            let _ = DeleteObject(icons.into());
-        }
-        let _ = DeleteObject(font.into());
-        ReleaseDC(Some(hwnd), dc);
     }
 }

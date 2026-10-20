@@ -25,7 +25,7 @@ local service/repository layers would add no useful boundary.
 | `src/tray.rs` | Native tray icon, Open/Quit menu and window restoration |
 | `src/profile.rs` | Explicit persistent engine-data locations |
 | `src/platform/mod.rs` | Narrow platform configuration/attachment dispatch and native error presentation |
-| `src/platform/titlebar.rs` | Windows native non-client header, centered document title and window controls |
+| `src/platform/titlebar.rs`, `titlebar.js` | Windows frame, accessible native caption buttons and Discord header layout |
 | `src/platform/windows.rs` | Windows identity, DWM appearance and event-driven WebView2 resource policy |
 | `src/platform/macos.rs` | WKWebView persistent store and background scheduling configuration |
 | `build.rs`, `tauri.conf.json` | Tauri build context, identity, icons and bundle metadata |
@@ -73,7 +73,9 @@ optimizations must not turn into fatal startup failures.
 
 - Parse main-frame URLs with `url`: require HTTPS, exact `discord.com`, effective
   port 443, and empty username/password. Prefix matching is insufficient.
-- Deny new windows and requested downloads. External-link opening is not implemented.
+- Deny new webviews and requested downloads. A user-initiated support.discord.com
+  popup opens only the fixed official support homepage in the system browser.
+  Other popups remain denied; the native handler checks the gesture and URL origin.
 - Main-frame navigation policy is not a subresource firewall. Discord's CDN and
   engine-managed requests retain normal browser security behavior.
 - Configure no application invoke handler, privileged remote capability grants
@@ -120,24 +122,28 @@ are stored in GitHub Actions secrets, never in source; only the public key is em
 ## Appearance and background policy
 
 The existing coral artwork supplies native executable/bundle, taskbar/Dock,
-shortcut and installer icons. Windows uses a native non-client header inspired
-by the supplied reference: `#121214`, 32 logical pixels high, centered page title
-and minimize/maximize/close controls. The page title is read through Tauri's
-native document-title event, never through a permanent page script. Windows
-retains native dragging, resizing, double-click maximize and system commands;
-close still uses the tray lifecycle. The HWND subclass is UI-thread-only and
-removed on destruction. GDI objects/DCs are released after each event-driven paint.
-No extra WebView, IPC grant or timer is added. Failed installation of the custom
-frame restores the standard window frame. A one-shot document initialization
-installs static CSS hiding Discord's duplicate top bar and collapsing its grid
-row. Class-prefix selectors target only the direct bar under the app base; channel
-headers and toolbars remain visible. CSS matches later SPA renders without a
-MutationObserver, recurring script or polling. Discord markup changes can require
-updating these selectors. The inbox button issues a single DOM click on Discord's English/French inbox
-control; selector compatibility depends on the website and is not yet runtime
-validated. Help opens the fixed official support URL in the default browser. macOS/Linux keep
-their native title-bar conventions. Visual fidelity, mixed DPI, caption controls
-and accessibility have not yet been validated at runtime.
+shortcut and installer icons. Windows retains Discord's actual 32-pixel top bar:
+the live title, SVG icons, inbox/help actions and their native page interactions.
+Static CSS centers the title and reserves 132 logical pixels at the right for
+three native owner-drawn BUTTON controls, each 44 by 32 logical pixels. Buttons
+retain Windows input/capture/accessibility semantics, with hover, pressed,
+keyboard-focus and red-close feedback. System commands minimize, maximize/restore
+and close to tray; restoring focus after maximize returns typing to Discord.
+
+The HWND subclass removes the redundant OS caption while retaining native frame
+insets and resizing. WebView2 Settings9 enables CSS app-region dragging before
+the first Discord navigation. Windows first creates an empty browser; native
+security/drag settings are applied before Navigate(HOME). Discord receives no
+native command bridge, web messages or host objects. Other platforms navigate
+directly to HOME and keep native decorations.
+
+The one-shot document initialization installs static layout CSS. No observer,
+recurring script, synthetic inbox click or additional WebView is used. Native
+children are owned/destroyed by their parent; hooks remain on the UI thread and
+are removed at destruction. Brushes/pens/DCs are released synchronously. Failed
+frame setup restores native decorations. Discord class-prefix changes may need
+CSS updates. Visual fidelity, mixed DPI, zoom, dragging and real input remain
+subject to runtime acceptance.
 
 Windows resource adjustments are event-driven: minimized or tray-hidden rendering is hidden,
 then restored with the window. Memory target is NORMAL while active or playing

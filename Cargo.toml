@@ -1,6 +1,6 @@
 [package]
 name = "discard"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
 description = "A focused desktop home for Discord Web, built with Rust and Tauri"
 repository = "https://github.com/Zvenytoh/discard"
@@ -25,6 +25,7 @@ windows = { version = "0.62", features = [
     "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
     "Win32_UI_HiDpi",
+    "Win32_UI_Controls",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
