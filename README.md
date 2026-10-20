@@ -27,8 +27,8 @@ Platform support and runtime validation are tracked separately below.
 | Candidate target | Engine | Packaging | Validation status |
 | :--- | :--- | :--- | :--- |
 | Windows 10/11 x64 | WebView2 Evergreen | Per-user Inno installer, portable EXE | Migration acceptance pending |
-| macOS 14+ Intel and Apple Silicon | WKWebView | Separate DMGs | Experimental; native runtime checks pending |
-| Ubuntu 22.04+ x64 | WebKitGTK 4.1 | DEB, AppImage | Experimental; native runtime checks pending |
+| macOS 14+ Intel and Apple Silicon | WKWebView | Not built in current release workflow | Not packaged |
+| Ubuntu 22.04+ x64 | WebKitGTK 4.1 | Not built in current release workflow | Not packaged |
 
 Other Linux distributions are best effort. An AppImage does not supply every
 system codec or guarantee compatibility with every graphics stack.
@@ -46,8 +46,8 @@ system codec or guarantee compatibility with every graphics stack.
 - Event-driven Windows background handling: hide rendering when minimized or hidden and
   request lower memory use while inactive, with normal memory priority for
   playing audio and conservative fallbacks. The page is never forcibly suspended.
-- Native CI configuration for all four architecture targets, with formatting,
-  Clippy, release builds, and packaging.
+- Native release CI for Windows x64, with formatting, Clippy, production builds,
+  the signed updater installer, and per-user Inno packaging.
 
 Voice, silent calls, video, notifications, screen sharing, session upgrades, and
 installation behavior need the checks recorded in the
@@ -84,15 +84,7 @@ GitHub sign-in may be required for workflow artifacts.
 | CI artifact | Candidate files |
 | :--- | :--- |
 | `discard-windows-x64` | `Discard-Setup.exe`, `Discard.exe`, `SHA256SUMS.txt` |
-| `discard-linux-x64` | `Discard_0.2.2_linux-x64.deb`, `Discard_0.2.2_linux-x64.AppImage` |
-| `discard-macos-x64` | `Discard_0.2.2_macos-x64[-unsigned-experimental].dmg` |
-| `discard-macos-arm64` | `Discard_0.2.2_macos-arm64[-unsigned-experimental].dmg` |
-
-The bracketed macOS suffix is present when signing credentials are unavailable.
-No signing certificate is currently configured for this project. Windows binaries
-are unsigned; macOS unsigned/ad-hoc packages are experimental CI artifacts and
-are excluded from public release assets. Normal macOS distribution requires
-Developer ID signing and notarization.
+Other platform packages are not built by the current release workflow.
 
 ### Windows installation and session data
 
@@ -174,12 +166,10 @@ On Linux use `cargo tauri build --bundles deb,appimage -- --locked`; on macOS
 use `cargo tauri build --bundles dmg -- --locked`. Native SDKs and packaging
 tools are required; macOS release signing also requires private CI credentials.
 
-The Desktop workflow builds branch/PR artifacts for Windows x64, Linux x64,
-macOS x64, and macOS arm64. Only a matching `v<package-version>` tag enables its
-publication job, after every build succeeds. That job normalizes filenames,
-excludes unsigned macOS packages, and generates `SHA256SUMS.txt` across public
-assets. A branch run never publishes a release. Review the compatibility report
-and candidate artifacts before creating a release tag.
+The Desktop workflow builds Windows x64 only. A matching
+`v<package-version>` tag creates a signed updater manifest and publishes the
+installer, portable executable, signature and `SHA256SUMS.txt`. A branch run
+never publishes a release.
 
 ## Architecture
 

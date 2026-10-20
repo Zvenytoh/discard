@@ -158,16 +158,15 @@ Runtime remains one crate; packaging belongs to scripts and native CI.
 Tauri 2.12.4 and tauri-build 2.7.3 are pinned, with tauri-cli 2.12.3 installed via
 Cargo and dependencies resolved in `Cargo.lock`. No Node toolchain is required.
 
-The Desktop workflow targets Windows MSVC x64, Ubuntu 22.04 x64, macOS Intel and
-Apple Silicon. Windows retains Inno and its Microsoft-signed WebView2 bootstrapper
-verification. Linux produces DEB/AppImage; macOS produces architecture-specific
-DMGs with a macOS 14 floor. Branch/PR builds yield artifacts only.
+The Desktop release workflow targets Windows MSVC x64 only. Windows retains Inno
+and its Microsoft-signed WebView2 bootstrapper verification. Other target modules
+remain in source but are not packaged by the current workflow. Branch/PR builds
+yield Windows artifacts only.
 
-A matching version tag permits one publication job after all required builds.
-It computes public asset checksums and excludes unsigned/ad-hoc experimental
-macOS artifacts. Signing/notarization secrets belong only in CI; no certificate
-is currently configured. Windows binaries remain unsigned. Neither workflow
-configuration nor CI compilation establishes engine/media compatibility.
+A matching version tag permits publication after the Windows build succeeds.
+It signs the updater installer, creates `latest.json`, and computes public asset
+checksums. The updater signing key belongs only in CI. The executable is not
+Authenticode-signed. CI compilation does not establish engine/media compatibility.
 
 ## Rust and validation conventions
 
