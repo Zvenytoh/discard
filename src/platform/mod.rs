@@ -3,8 +3,14 @@
 #[cfg(windows)]
 use tauri::Manager;
 
+#[cfg(windows)]
+pub(crate) mod activity;
+#[cfg(windows)]
+pub(crate) mod audio;
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(windows)]
+pub(crate) mod rpc;
 #[cfg(windows)]
 mod titlebar;
 #[cfg(windows)]
@@ -22,6 +28,14 @@ pub(crate) fn configure(
         .initialization_script(titlebar::PAGE_STYLE);
     #[cfg(target_os = "macos")]
     let builder = macos::configure(builder);
+    #[cfg(windows)]
+    let builder = builder.initialization_script(
+        include_str!("audio.js").replace(
+            "__DISCARD_WORKLET__",
+            &serde_json::to_string(include_str!("audio-worklet.js"))
+                .expect("static worklet serialization"),
+        ),
+    );
     // Native drag/drop events are unused; let Discord receive HTML file drops.
     builder.disable_drag_drop_handler()
 }

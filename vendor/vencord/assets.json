@@ -1,0 +1,20 @@
+[
+  {
+    "name": "browser.css",
+    "id": 641805427,
+    "digest": "sha256:b329ca21ca73717e389af1f831335c47e0973edd54b747d445743857f08a69da",
+    "updated_at": "2026-10-14T22:00:54Z"
+  },
+  {
+    "name": "browser.js",
+    "id": 641805431,
+    "digest": "sha256:25239a7abbef6bf80a736cad27daef54bbbcb20bb28fab27b9353681477554db",
+    "updated_at": "2026-10-14T22:00:55Z"
+  },
+  {
+    "name": "browser.js.LEGAL.txt",
+    "id": 641805454,
+    "digest": "sha256:ed1bedf381c7564f739b0325326de68c34457ee95e6d4383d9c12e13c0e21e91",
+    "updated_at": "2026-10-14T22:00:55Z"
+  }
+]

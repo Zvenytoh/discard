@@ -54,6 +54,38 @@ installation behavior need the checks recorded in the
 [compatibility report](docs/validation/tauri-compatibility.md). No CPU or memory
 saving is claimed before the
 [performance measurements](docs/validation/tauri-performance.md).
+### Vencord and native features (v0.3.0)
+
+Vencord's browser build is bundled at a fixed upstream commit. Its settings and
+plugins appear inside Discord. The tray menu can disable Vencord or game
+activity and restart Discard without clearing your Discord profile.
+
+On Windows, foreground games are matched against a bundled executable catalog;
+activity is retained until the process exits. There is no periodic process scan.
+A minimal local Discord IPC receiver also accepts Rich Presence from compatible
+games. It implements handshake, ping and SET_ACTIVITY, not the full Discord SDK.
+Existing Discord IPC pipe owners are not replaced.
+
+**Application audio sharing is experimental and off until you select a source.**
+Right-click the tray, open **Audio du stream (experimental)**, refresh the
+application list if needed, and select the application whose sound you want.
+Then share a screen/window normally in Discord. Video stays browser-managed;
+WASAPI captures only the selected process tree and supplies a stereo audio track.
+The video choice and audio source are separate: select the same application in
+both places. Stop sharing to stop capture; **Desactiver l'audio natif** also
+removes the selection. Without a source, normal Discord Web capture is unchanged.
+
+Process audio requires Windows build 20348+ (including supported Windows 11
+versions). Failure does not fall back to capturing all system audio. This path
+still needs a real call acceptance check, including browser CSP/worklet support,
+remote audio, echo, synchronization, stop, and tray behavior. No performance or
+full official-client feature parity is claimed. Native settings remain in the
+tray; unsupported official desktop settings are not artificially exposed.
+
+Discard is distributed under GPL-3.0-or-later with bundled Vencord. Upstream
+commit, asset hashes, licenses and source links are in [vendor/vencord](vendor/vencord).
+The game catalog attribution is in [vendor/GAMES-SOURCE.txt](vendor/GAMES-SOURCE.txt).
+
 ### App updates
 
 Starting with v0.2.1, the installed Windows application checks once at startup

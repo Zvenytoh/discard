@@ -20,17 +20,31 @@ pub(crate) fn run() -> tauri::Result<()> {
                 platform::show_startup_error(&error);
                 app.handle().exit(1);
             } else {
+                #[cfg(windows)]
+                crate::platform::audio::initialize(app.handle());
                 if let Err(error) = tray::create(app) {
                     // A failed tray must never leave an inaccessible hidden app.
                     eprintln!("Tray unavailable; closing the window will quit: {error}");
                 }
                 #[cfg(windows)]
-                crate::updater::start(app.handle().clone());
+                {
+                    if let Err(error) = crate::platform::activity::start(app.handle()) {
+                        eprintln!("Game detection unavailable: {error}");
+                    }
+                    crate::platform::rpc::start(app.handle());
+                    crate::updater::start(app.handle().clone());
+                }
             }
             Ok(())
         })
         .on_window_event(|window, event| {
             if window.label() == "main" {
+                #[cfg(windows)]
+                if matches!(event, tauri::WindowEvent::Destroyed) {
+                    crate::platform::activity::stop(window.app_handle());
+                    crate::platform::rpc::stop(window.app_handle());
+                    crate::platform::audio::stop(window.app_handle());
+                }
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     if window.app_handle().tray_by_id("main").is_some() {
                         match window.hide() {
@@ -65,6 +79,14 @@ fn create_window(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     };
     let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(start.parse()?))
         .title("Discard")
+        .on_page_load(|window, _| {
+            #[cfg(windows)]
+            {
+                crate::platform::activity::replay(window.app_handle());
+                crate::platform::rpc::replay(window.app_handle());
+                crate::platform::audio::replay(window.app_handle());
+            }
+        })
         .on_document_title_changed(|window, title| {
             let title = title
                 .trim_end_matches(" | Discord")
@@ -91,7 +113,9 @@ fn create_window(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(directory) = profile::directory(app.handle())? {
         builder = builder.data_directory(directory);
     }
-    let window = platform::configure(builder).build()?;
+    // Vencord plugins must capture our getDisplayMedia wrapper, not bypass it.
+    let builder = platform::configure(builder);
+    let window = crate::mods::configure(builder, app.handle())?.build()?;
     platform::attach(&window)?;
     Ok(())
 }

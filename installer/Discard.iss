@@ -31,6 +31,11 @@ RestartApplications=no
 Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 
 [Files]
+Source: "..\LICENSE"; DestDir: "{app}\licenses"; Flags: ignoreversion
+Source: "..\vendor\vencord\README.md"; DestDir: "{app}\licenses"; DestName: "Vencord-source.md"; Flags: ignoreversion
+Source: "..\vendor\vencord\browser.js.LEGAL.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
+Source: "..\vendor\ARRPC-LICENSE"; DestDir: "{app}\licenses"; Flags: ignoreversion
+Source: "..\vendor\GAMES-SOURCE.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Source: "..\target\release\discard.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\assets\icon.ico"; DestDir: "{app}"; DestName: "discard.ico"; Flags: ignoreversion
 Source: "..\target\release\WebView2Loader.dll"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist

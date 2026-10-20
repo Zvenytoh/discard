@@ -22,7 +22,11 @@ local service/repository layers would add no useful boundary.
 | `src/app.rs` | Tauri setup, one external window, security hooks and exit policy |
 | `src/navigation.rs` | Home URL and pure main-frame allowlist |
 | `src/updater.rs` | Windows installed-app startup check, native consent and verified Inno handoff |
-| `src/tray.rs` | Native tray icon, Open/Quit menu and window restoration |
+| `src/tray.rs` | Native tray, mod recovery switches and application-audio selection |
+| `src/mods.rs`, `mods.js` | Pinned browser Vencord bootstrap and sanitized activity adapter |
+| `src/platform/activity.rs` | Windows foreground-event game matching and process-exit notifications |
+| `src/platform/rpc.rs` | Bounded local named-pipe Rich Presence receiver |
+| `src/platform/audio.rs`, `audio.js`, `audio-worklet.js` | Experimental native-selected WASAPI audio and bounded binary transport |
 | `src/profile.rs` | Explicit persistent engine-data locations |
 | `src/platform/mod.rs` | Narrow platform configuration/attachment dispatch and native error presentation |
 | `src/platform/titlebar.rs`, `titlebar.js` | Windows frame, accessible native caption buttons and Discord header layout |
@@ -51,7 +55,7 @@ service registry. Add a module only when it owns a concrete responsibility.
 setup. It loads `https://discord.com/app` directly at 1200×800 logical pixels,
 with native decorations, a dark theme and opaque `#242429` background.
 `tauri.conf.json` declares no initial windows; it grants no remote capabilities.
-No frontend development server or permanent application-authored page script is involved.
+No frontend development server is involved. Vencord and the native activity/audio adapters now run in the Discord document; this is an explicit extension of the original wrapper-only scope.
 
 `profile::directory(&tauri::AppHandle)` returns the platform's explicit data
 location before the window is built. `platform::configure(builder)` applies
@@ -192,3 +196,45 @@ installation cases are independent checks. Record unperformed checks rather than
 presenting all desktop targets as validated support.
 
 The restored Windows window disables native decorations and shadows. A native region reserves the caption controls independently of Chromium rendering order.
+
+## Native integration (v0.3.0)
+
+Vencord initializes at document start only in the main HTTPS discord.com frame.
+The official browser bundle and CSS are embedded, with source and hashes pinned
+in vendor/vencord. The browser-native stub receives local CSS before initStyles.
+Preferences use presence markers in Tauri's app config directory, separately
+from the existing WebView2 profile. A tray toggle writes the marker and restarts.
+
+Windows game detection uses one WinEvent/message-wait thread. It opens only the
+foreground process for image matching, keeps the game until its process handle
+signals exit, and blocks on events while idle. It does not detect never-focused
+background games. The filtered catalog excludes launchers and argument-dependent
+or ambiguous executable matches. Activity updates go from Rust to the document;
+no process paths or process enumeration API are exposed to remote content.
+
+RPC uses discord-ipc-0 through discord-ipc-9 only when no existing owner holds a
+name. Local clients are bounded to eight, 64 KiB frames and 60 frames/second per
+connection. It accepts handshake, ping and SET_ACTIVITY only; no shell, invite,
+filesystem, credential or capture command is implemented. Disconnect and page
+reload update the Vencord adapter, with serialized metadata lookups.
+
+Audio is armed by a native tray choice, never by a page-provided PID. Selection
+records process creation time and excludes Discard and its ancestors. Only then
+is an ephemeral loopback listener created. Handshakes require a fresh 256-bit
+path token and exact Discord Origin. The service is read-only: no inbound page
+commands start arbitrary native operations. All scripts in the Discord origin
+share this trust boundary; the token does not isolate Vencord from Discord code.
+
+A connected share initializes WASAPI process-loopback on a worker MTA, verifies
+PID identity and captures 48 kHz stereo float PCM. It blocks on audio, target-exit
+and cancellation handles. At most four 1024-frame packets queue for delivery;
+the worklet ring is also bounded. PCM travels as binary WebSocket frames, never
+video or JSON/base64 sample batches. getDisplayMedia retains the browser's video
+and attaches the native audio track. Its stop methods, system-ended events,
+navigation and native stop action close the channel and release capture. The
+normal path has no local listener or native recording until explicitly armed.
+
+The bridge uses neither Tauri invoke permissions nor WebMessages/host objects.
+No CSP is weakened to force the prototype to work. Real-call validation remains
+mandatory before treating application audio as production-ready; Windows capture
+availability does not prove Discord will publish or receive the attached track.
