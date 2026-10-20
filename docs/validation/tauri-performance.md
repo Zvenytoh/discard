@@ -7,11 +7,10 @@ language do not establish total process-tree memory or call reliability.
 ## Implemented policy
 
 - One native event loop, one WebView, persistent profile and default GPU path.
-- Windows minimizes WebView rendering using native events. Memory target LOW
-  is a best-effort hint for inactive/minimized content; foreground or playing
-  audio uses NORMAL. Missing/failed observation retains conservative NORMAL.
-- Audio silence does not prove there is no call. Silent microphone/video cases
-  need separate runtime checks. Memory target can cause paging and worse latency.
+- Windows updates renderer visibility from native minimize/restore events and
+  retains NORMAL memory priority, including silent calls and streams. Automatic
+  LOW targeting was removed in v0.3.4; no playback observer changes this policy.
+  Missing optional engine interfaces leave engine defaults in place.
 - macOS 14+ disables background suspension policy to favor ongoing activity.
   This can increase background CPU/memory; no equivalent savings are promised.
 - Linux retains supported engine scheduling. No injected keepalive, periodic

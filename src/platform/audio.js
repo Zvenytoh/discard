@@ -9,7 +9,8 @@
         const endpoint = window.__discardAudioEndpoint;
         const video = await getDisplayMedia(...args);
         if (!endpoint || !video.getVideoTracks().length) return video;
-        let context, socket, node, timer, audio, rejectStart;
+        let context, socket, node, timer, audio, output, rejectStart, pending;
+        let inFlight = false;
         let cleaned = false;
         const deadline = performance.now() + 10000;
         const startup = promise => new Promise((resolve, reject) => {
@@ -22,11 +23,13 @@
             cleaned = true;
             clearTimeout(timer);
             window.removeEventListener("pagehide", ended);
+            pending = undefined;
             socket?.close();
-            node?.disconnect();
+            if (node) { node.port.onmessage = null; node.port.close(); node.disconnect(); }
+            output?.stream.getTracks().forEach(track => track.stop());
             if (context) void context.close().catch(error => console.error("Discard audio cleanup:", error));
         };
-        const ended = () => { audio?.stop(); rejectStart?.(new Error("Screen sharing stopped")); cleanup(); };
+        const ended = () => { rejectStart?.(new Error("Screen sharing stopped")); cleanup(); };
         for (const track of video.getVideoTracks()) {
             track.addEventListener("ended", ended, { once: true });
             const stopTrack = track.stop.bind(track);
@@ -41,7 +44,15 @@
             finally { URL.revokeObjectURL(worklet); }
             if (cleaned) throw new Error("Screen sharing stopped");
             node = new AudioWorkletNode(context, "discard-audio", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
-            const output = context.createMediaStreamDestination();
+            // One port message in flight; keep only the newest pending packet on stalls.
+            const post = data => { inFlight = true; node.port.postMessage(data, [data]); };
+            node.port.onmessage = () => {
+                if (cleaned) return;
+                inFlight = false;
+                if (pending) { const data = pending; pending = undefined; post(data); }
+            };
+            node.onprocessorerror = () => { rejectStart?.(new Error("Native audio processor failed")); cleanup(); };
+            output = context.createMediaStreamDestination();
             node.connect(output);
             await startup(context.resume());
             if (cleaned) throw new Error("Screen sharing stopped");
@@ -49,13 +60,18 @@
                 socket = new WebSocket(endpoint);
                 socket.binaryType = "arraybuffer";
                 socket.onmessage = ({ data }) => {
+                    if (cleaned) return;
                     if (data === "ready") { resolve(); }
                     else if (typeof data === "string" && data.startsWith("error:")) { reject(new Error(data.slice(6))); cleanup(); }
-                    else if (data instanceof ArrayBuffer && data.byteLength <= 65536 && data.byteLength % 8 === 0) node.port.postMessage(data, [data]);
+                    else if (data instanceof ArrayBuffer && data.byteLength > 0 && data.byteLength <= 65536 && data.byteLength % 8 === 0) {
+                        if (inFlight) pending = data;
+                        else post(data);
+                    }
                 };
-                socket.onerror = () => reject(new Error("Native audio connection failed"));
-                socket.onclose = () => { reject(new Error("Native audio stopped")); output.stream.getTracks().forEach(track => track.stop()); cleanup(); };
+                socket.onerror = () => { reject(new Error("Native audio connection failed")); cleanup(); };
+                socket.onclose = () => { reject(new Error("Native audio stopped")); cleanup(); };
             }));
+            if (cleaned) throw new Error("Native audio stopped");
             video.getAudioTracks().forEach(track => { video.removeTrack(track); track.stop(); });
             audio = output.stream.getAudioTracks()[0];
             video.addTrack(audio);

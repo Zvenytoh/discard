@@ -20,18 +20,14 @@ jobs:
             target: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
     env:
-      MACOSX_DEPLOYMENT_TARGET: '14.0'
+      PACKAGE_BUILD: ${{ github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' }}
     defaults:
       run:
         shell: bash
     steps:
       - uses: actions/checkout@v7.0.1
-      - name: Linux native prerequisites
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf libfuse2
       - name: Install Rust components and native target
+        id: rust
         env:
           RUST_TARGET: ${{ matrix.target }}
         run: |
@@ -39,6 +35,21 @@ jobs:
           rustup component add rustfmt clippy
           rustup target add "$RUST_TARGET"
           test "$(rustc -vV | sed -n 's/^host: //p' | tr -d '\r')" = "$RUST_TARGET"
+          echo "fingerprint=$(rustc -vV | sha256sum | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+      - name: Cache Cargo dependencies and build artifacts
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/registry/src
+            ~/.cargo/git/db
+            target/debug
+            target/release
+          key: cargo-${{ runner.os }}-${{ matrix.target }}-${{ steps.rust.outputs.fingerprint }}-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ matrix.target }}-${{ steps.rust.outputs.fingerprint }}-${{ hashFiles('Cargo.lock') }}-
+            cargo-${{ runner.os }}-${{ matrix.target }}-${{ steps.rust.outputs.fingerprint }}-
       - name: Verify package version and release tag
         env:
           RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
@@ -53,25 +64,24 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy --locked --all-targets -- -D warnings
-      - name: Release build
-        run: cargo build --release --locked
       - name: Install reviewed Tauri CLI
+        if: env.PACKAGE_BUILD == 'true'
         shell: pwsh
         env:
           RUST_TARGET: ${{ matrix.target }}
           GH_TOKEN: ${{ github.token }}
         run: ./scripts/install-tauri-cli.ps1 -Target $env:RUST_TARGET
       - name: Build Windows application
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && env.PACKAGE_BUILD == 'true'
         run: cargo tauri build --no-bundle -- --locked
       - name: Install Inno Setup
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && env.PACKAGE_BUILD == 'true'
         shell: pwsh
         run: |
           choco install innosetup --yes --no-progress
           if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed.' }
       - name: Package Windows installer and portable executable
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && env.PACKAGE_BUILD == 'true'
         shell: pwsh
         env:
           RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
@@ -94,76 +104,14 @@ jobs:
             "$hash  $($asset.Name)"
           }
           $checksums | Set-Content -LiteralPath target/distribution/SHA256SUMS.txt -Encoding ascii
-      - name: Package Linux
-        if: runner.os == 'Linux'
-        run: |
-          cargo tauri build --bundles deb,appimage -- --locked
-          mkdir -p target/distribution
-          debs=(target/release/bundle/deb/*.deb)
-          images=(target/release/bundle/appimage/*.AppImage)
-          test "${#debs[@]}" -eq 1 && test -f "${debs[0]}"
-          test "${#images[@]}" -eq 1 && test -f "${images[0]}"
-          cp "${debs[0]}" "target/distribution/Discard_${DISCARD_VERSION}_linux-x64.deb"
-          cp "${images[0]}" "target/distribution/Discard_${DISCARD_VERSION}_linux-x64.AppImage"
-      - name: Package macOS (unsigned experimental unless signing credentials exist)
-        if: runner.os == 'macOS'
-        env:
-          RUST_TARGET: ${{ matrix.target }}
-          PACKAGE_PLATFORM: ${{ matrix.platform }}
-          APPLE_CERTIFICATE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_CERTIFICATE || '' }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
-          APPLE_SIGNING_IDENTITY: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_SIGNING_IDENTITY || '' }}
-          APPLE_ID: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_ID || '' }}
-          APPLE_PASSWORD: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_TEAM_ID || '' }}
-        run: |
-          signed=false
-          signing_dir=$(mktemp -d "$RUNNER_TEMP/discard-signing.XXXXXX")
-          keychain="$signing_dir/build.keychain-db"
-          cleanup() {
-            if [[ -f "$keychain" ]]; then security delete-keychain "$keychain"; fi
-            rm -f "$signing_dir/certificate.p12"
-            rmdir "$signing_dir"
-          }
-          trap cleanup EXIT
-          if [[ -n "$APPLE_CERTIFICATE" && -n "$APPLE_CERTIFICATE_PASSWORD" && -n "$APPLE_SIGNING_IDENTITY" && -n "$APPLE_ID" && -n "$APPLE_PASSWORD" && -n "$APPLE_TEAM_ID" ]]; then
-            [[ "$APPLE_SIGNING_IDENTITY" == 'Developer ID Application:'* ]]
-            printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$signing_dir/certificate.p12"
-            keychain_password=$(openssl rand -hex 24)
-            echo "::add-mask::$keychain_password"
-            security create-keychain -p "$keychain_password" "$keychain"
-            security set-keychain-settings -lut 21600 "$keychain"
-            security unlock-keychain -p "$keychain_password" "$keychain"
-            security import "$signing_dir/certificate.p12" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain"
-            security list-keychains -d user -s "$keychain" login.keychain-db
-            signed=true
-          else
-            unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
-            export APPLE_SIGNING_IDENTITY='-'
-            echo 'No complete signing credentials: experimental unsigned/ad-hoc macOS CI artifact only.'
-          fi
-          cargo tauri build --target "$RUST_TARGET" --bundles dmg -- --locked
-          mkdir -p target/distribution
-          images=(target/"$RUST_TARGET"/release/bundle/dmg/*.dmg)
-          test "${#images[@]}" -eq 1 && test -f "${images[0]}"
-          if [[ "$signed" == true ]]; then
-            apps=(target/"$RUST_TARGET"/release/bundle/macos/*.app)
-            test "${#apps[@]}" -eq 1 && test -d "${apps[0]}"
-            codesign --verify --deep --strict "${apps[0]}"
-            xcrun stapler validate "${apps[0]}"
-            suffix=''
-          else
-            suffix='-unsigned-experimental'
-          fi
-          cp "${images[0]}" "target/distribution/Discard_${DISCARD_VERSION}_${PACKAGE_PLATFORM}${suffix}.dmg"
       - name: Verify Windows deliverables
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && env.PACKAGE_BUILD == 'true'
         run: |
           test -s target/distribution/Discard-Setup.exe
           test -s target/distribution/Discard.exe
           test -s target/distribution/SHA256SUMS.txt
       - uses: actions/upload-artifact@v7.0.2
+        if: env.PACKAGE_BUILD == 'true'
         with:
           name: discard-${{ matrix.platform }}
           path: target/distribution/*

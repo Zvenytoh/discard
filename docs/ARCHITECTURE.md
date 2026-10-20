@@ -171,13 +171,18 @@ lower allocation, better responsiveness or reliable calls. See the
 ## Build and release boundary
 
 Runtime remains one crate; packaging belongs to scripts and native CI.
-Tauri 2.12.4 and tauri-build 2.7.3 are pinned, with tauri-cli 2.12.3 installed via
-Cargo and dependencies resolved in `Cargo.lock`. No Node toolchain is required.
+Tauri 2.12.4 and tauri-build 2.7.3 are pinned. Tauri CLI 2.12.3 is installed from
+a checksum-verified upstream archive, with dependencies resolved in `Cargo.lock`.
+No Node toolchain is required.
 
 The Desktop release workflow targets Windows MSVC x64 only. Windows retains Inno
 and its Microsoft-signed WebView2 bootstrapper verification. Other target modules
 remain in source but are not packaged by the current workflow. Branch/PR builds
-yield Windows artifacts only.
+run formatting and Clippy. Tags and manual runs use one Tauri
+production build and package Windows artifacts. Cargo dependencies and build
+artifacts are cached by OS, target, compiler fingerprint and lockfile; fallback
+can reuse older lockfiles for the same compiler/target, with Cargo checking
+dependency fingerprints. Release signing remains tag-only.
 
 A matching version tag permits publication after the Windows build succeeds.
 It signs the updater installer, creates `latest.json`, and computes public asset
@@ -229,7 +234,12 @@ share this trust boundary; the token does not isolate Vencord from Discord code.
 A connected share initializes WASAPI process-loopback on a worker MTA, verifies
 PID identity and captures 48 kHz stereo float PCM. It blocks on audio, target-exit
 and cancellation handles. At most four 1024-frame packets queue for delivery;
-the worklet ring is also bounded. PCM travels as binary WebSocket frames, never
+the worklet ring is also bounded. The browser sends at most one unacknowledged
+MessagePort packet and retains only the newest pending packet during a stall.
+The worklet acknowledges after copying into its bounded ring; overflow drops
+old samples rather than accumulating delay. Every server write, including errors,
+is cancellable and has a two-second timeout. PCM travels as binary WebSocket
+frames, never
 video or JSON/base64 sample batches. getDisplayMedia retains the browser's video
 and attaches the native audio track. Its stop methods, system-ended events,
 navigation and native stop action close the channel and release capture. The

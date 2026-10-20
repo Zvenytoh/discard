@@ -300,17 +300,17 @@ async fn serve(
                     _ => break,
                 },
                 frame = receive.recv() => {
-                    let message = match frame {
-                        Some(Frame::Ready) => Message::Text("ready".into()),
-                        Some(Frame::Pcm(bytes)) => Message::Binary(bytes.into()),
-                        Some(Frame::Failed(error)) => { let _ = writer.send(Message::Text(format!("error:{error}").into())).await; break; },
+                    let (message, terminal) = match frame {
+                        Some(Frame::Ready) => (Message::Text("ready".into()), false),
+                        Some(Frame::Pcm(bytes)) => (Message::Binary(bytes.into()), false),
+                        Some(Frame::Failed(error)) => (Message::Text(format!("error:{error}").into()), true),
                         None => break,
                     };
                     let sent = tokio::select! {
                         _ = cancel.changed() => break,
                         sent = tokio::time::timeout(std::time::Duration::from_secs(2), writer.send(message)) => sent,
                     };
-                    if !matches!(sent, Ok(Ok(()))) { break; }
+                    if terminal || !matches!(sent, Ok(Ok(()))) { break; }
                 }
             }
         }

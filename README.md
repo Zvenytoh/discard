@@ -137,7 +137,7 @@ Mobile remains outside this release.
 Download **Discard-Setup.exe** from the
 [latest release](https://github.com/Zvenytoh/discard/releases/latest) for Windows.
 Run the installer as your normal user. Other packages are listed on the release
-page when available. Development builds are also available from successful
+page when available. Manual development packages are also available from successful
 [Desktop workflow runs](https://github.com/Zvenytoh/discard/actions/workflows/desktop.yml);
 GitHub sign-in may be required for workflow artifacts.
 

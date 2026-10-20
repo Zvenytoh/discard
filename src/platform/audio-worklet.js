@@ -15,6 +15,7 @@ class DiscardAudio extends AudioWorkletProcessor {
                 this.samples[(this.read + this.count + i) % this.samples.length] = Number.isFinite(input[i]) ? input[i] : 0;
             }
             this.count += input.length;
+            this.port.postMessage(null);
         };
     }
     process(_, outputs) {
