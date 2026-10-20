@@ -59,6 +59,7 @@ jobs:
         shell: pwsh
         env:
           RUST_TARGET: ${{ matrix.target }}
+          GH_TOKEN: ${{ github.token }}
         run: ./scripts/install-tauri-cli.ps1 -Target $env:RUST_TARGET
       - name: Build Windows application
         if: runner.os == 'Windows'

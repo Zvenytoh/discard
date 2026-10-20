@@ -3,7 +3,9 @@ $ErrorActionPreference = 'Stop'
 $version = '2.12.3'
 $extension = if ($Target -like '*windows*' -or $Target -like '*apple*') { 'zip' } else { 'tgz' }
 $name = "cargo-tauri-$Target.$extension"
-$release = Invoke-RestMethod "https://api.github.com/repos/tauri-apps/tauri/releases/tags/tauri-cli-v$version"
+$headers = @{ Accept = 'application/vnd.github+json' }
+if ($env:GH_TOKEN) { $headers.Authorization = "Bearer $env:GH_TOKEN" }
+$release = Invoke-RestMethod -Headers $headers "https://api.github.com/repos/tauri-apps/tauri/releases/tags/tauri-cli-v$version"
 $asset = @($release.assets | Where-Object name -CEQ $name)
 if ($asset.Count -ne 1 -or $asset[0].digest -notmatch '^sha256:[a-f0-9]{64}$') {
     throw "Official Tauri CLI asset/digest unavailable: $name"
