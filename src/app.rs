@@ -8,12 +8,16 @@ use tauri::{
 use crate::{navigation, platform, profile, tray};
 
 pub(crate) fn run() -> tauri::Result<()> {
-    let builder = tauri::Builder::default();
+    // Register first: a duplicate must exit before creating a WebView/profile.
+    let builder =
+        tauri::Builder::default().plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            tray::restore(app);
+        }));
     #[cfg(windows)]
     let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init());
-    builder
+    let app = builder
         .setup(|app| {
             if let Err(error) = create_window(app) {
                 // Tauri panics on setup Err; report here before requesting clean exit.
@@ -67,7 +71,18 @@ pub(crate) fn run() -> tauri::Result<()> {
                 }
             }
         })
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())?;
+    app.run(|_app, event| {
+        if matches!(event, tauri::RunEvent::Exit) {
+            #[cfg(windows)]
+            {
+                crate::platform::activity::stop(_app);
+                crate::platform::rpc::stop(_app);
+                crate::platform::audio::stop(_app);
+            }
+        }
+    });
+    Ok(())
 }
 
 fn create_window(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {

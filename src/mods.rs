@@ -46,5 +46,6 @@ pub(crate) fn toggle(app: &tauri::AppHandle, name: &str) -> std::io::Result<()> 
         std::fs::create_dir_all(&config.directory)?;
         std::fs::write(marker, b"Disabled through the native tray menu.\n")?;
     }
-    app.restart();
+    app.request_restart();
+    Ok(())
 }

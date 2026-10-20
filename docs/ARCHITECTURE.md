@@ -267,3 +267,19 @@ stats request to three seconds. No background polling was added.
 The tray checks WebView2 ExecuteScript completion for a boolean acknowledgment;
 a missing diagnostic script now produces a native error instead of a silent no-op.
 No WebMessages or remote invocation permissions are enabled for this response.
+
+## Single-instance and tray lifecycle (v0.3.3)
+
+The official single-instance plugin is registered before all other plugins and
+before app setup, using the stable application identifier without semver-specific
+locks. Duplicate arguments are ignored: reopening only restores the existing
+window. The shared restoration action runs on the UI thread, shows/unminimizes,
+refreshes renderer visibility and then requests focus; failure to take foreground
+focus cannot leave the renderer logically hidden. No second profile is created.
+
+Mod preference changes use request_restart instead of restart on the UI thread,
+so ExitRequested/Exit events are delivered. RunEvent::Exit explicitly cancels
+activity detection, local RPC and native audio. The plugin also releases its
+instance lock on Exit, before Tauri launches the replacement process. Destroyed-window cleanup remains idempotent.
+Older binaries that do not implement a single-instance lock must be closed once
+when upgrading. Runtime rapid-launch/tray/restart acceptance remains pending.

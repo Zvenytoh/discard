@@ -102,6 +102,18 @@ selected Vencord resolution/FPS rather than always advertising a 4K/120 ceiling.
 If optional native audio fails, browser video continues and a notification warns
 that native audio is unavailable. Real-call stability still requires validation.
 
+### Window and tray lifecycle
+
+Discard allows one instance per application identifier. Launching it again
+restores the existing window from the tray instead of opening another WebView
+or sharing the Discord profile between two hosts. Closing hides the window;
+**Quitter** exits. Tray restoration also restores renderer visibility before
+requesting foreground focus. Mod toggles use Tauri's orderly restart path, and
+native activity/RPC/audio services stop during application exit.
+
+Close older copies once when updating from a version without the instance guard;
+those older executables cannot participate in the new lock.
+
 ### App updates
 
 Starting with v0.2.1, the installed Windows application checks once at startup

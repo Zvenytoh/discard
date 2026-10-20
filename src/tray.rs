@@ -184,16 +184,24 @@ fn build_menu(app: &tauri::AppHandle) -> Result<Menu<tauri::Wry>, Box<dyn std::e
     Ok(menu)
 }
 
-fn restore(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let result = window
-            .show()
-            .and_then(|()| window.unminimize())
-            .and_then(|()| window.set_focus())
-            .and_then(|()| platform::refresh_visibility(app));
-
-        if let Err(error) = result {
-            platform::show_error(&format!("Could not restore Discard: {error}"));
+pub(crate) fn restore(app: &tauri::AppHandle) {
+    // Both tray and second-launch callbacks use the same UI-thread transition.
+    let owner = app.clone();
+    if let Err(error) = app.run_on_main_thread(move || {
+        if let Some(window) = owner.get_webview_window("main") {
+            let result = window
+                .show()
+                .and_then(|()| window.unminimize())
+                // Restore rendering even when Windows refuses foreground focus.
+                .and_then(|()| platform::refresh_visibility(&owner));
+            if let Err(error) = result {
+                platform::show_error(&format!("Could not restore Discard: {error}"));
+            } else if let Err(error) = window.set_focus() {
+                // Foreground restrictions are not a failed tray restoration.
+                eprintln!("Discard restored but foreground focus was refused: {error}");
+            }
         }
+    }) {
+        platform::show_error(&format!("Could not schedule window restoration: {error}"));
     }
 }
