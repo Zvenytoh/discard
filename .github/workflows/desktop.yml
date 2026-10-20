@@ -65,7 +65,10 @@ jobs:
       - name: Release build
         run: cargo build --release --locked
       - name: Install reviewed Tauri CLI
-        run: cargo install tauri-cli --version 2.12.3 --locked
+        shell: pwsh
+        env:
+          RUST_TARGET: ${{ matrix.target }}
+        run: ./scripts/install-tauri-cli.ps1 -Target $env:RUST_TARGET
       - name: Build Windows application
         if: runner.os == 'Windows'
         run: cargo tauri build --no-bundle -- --locked
