@@ -106,3 +106,15 @@ STREAM-AUDIT.md for source findings and remediation. The transport now uses an
 optional dedicated Worker and timestamps. Real-call moving-content quality,
 Worker/CSP support, A/V sync and clock drift remain acceptance gates. No account
 feature, private capability or Electron-only plugin support is fabricated.
+
+## Implementation update: v0.3.9
+
+- Rejected quality changes restore the last accepted profile. Rapid changes are
+  serialized and coalesced; stopped/replaced tracks cannot publish old results.
+- Discord and picker preferences converge on the accepted capture profile.
+- Compatibility checks run per share/connection, with lazy-store retry and normal
+  browser fallback; checks cannot prove every upstream regex patch still matches.
+- Audio playout now uses capture timing and bounded sample-clock compensation.
+  Receiver-side synchronization and perceived quality remain runtime acceptance
+  gates, not compile results. Regression cases were extended but not run under
+  the project's explicit-unit/functional-test-request policy.

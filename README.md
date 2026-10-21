@@ -98,17 +98,22 @@ video parameters and encoding limits. Discord's own quality menu also updates
 capture constraints. Source aspect ratio is preserved; changing from a lower to a
 higher profile does not inherit the previous share's capture limit. Bitrate targets
 scale with resolution/FPS, with network adaptation retained; these are limits,
-not guaranteed delivered FPS or quality. No diagnostic wrapper or report is added.
+not guaranteed delivered FPS or quality. Quality changes are serialized, only the
+latest pending request is retained, and a rejected profile restores the last
+accepted settings in Discord and the picker. No diagnostic report is added.
 
 Optional native audio respects video-only shares and the Vencord mute choice.
 A dedicated Worker relays audio directly to the worklet, with bounded delivery,
-capture timestamps and stale-packet rejection. Startup has one shared ten-second
+capture timestamps and stale-packet rejection. The worklet uses capture timing,
+a small playout buffer and bounded resampling to compensate sample-clock drift;
+this is not a guarantee of received audio/video synchronization. Startup has one shared ten-second
 deadline. Failure preserves browser video; unexpected failure after startup shows
 one warning, while a deliberate native-menu stop is quiet.
 
 WebScreenShare and WebScreenShareFixes remain the pinned browser plugins. Disabling
 them is respected. Discord's private stream modules can change: unavailable
-profile integration shows a compatibility warning and preserves browser capture.
+profile integration is checked when sharing starts and its connection appears.
+Unavailable modules show a compatibility warning and preserve browser capture.
 Plugins requiring Electron/native Discord modules are not supported by Tauri.
 Real-call video quality, synchronization and Worker/CSP compatibility still require
 acceptance checks; no fixed FPS, latency or complete official-client parity is claimed.

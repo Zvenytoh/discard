@@ -52,7 +52,7 @@ test("audio Worker drops old packets and retains only the latest pending packet"
     assert.equal(sent.length, 1);
     port.onmessage();
     assert.equal(sent.length, 2);
-    assert.equal(new Float32Array(sent[1])[0], 3);
+    assert.equal(new Float32Array(sent[1].samples)[0], 3);
     socket.onclose({ code: 1000, reason: "disabled" });
     assert.equal(events.at(-1).stopped, true);
 });
@@ -96,22 +96,24 @@ test("post-start native audio failure warns once and keeps video alive", async (
     assert.equal(worker.terminated, true);
 });
 
-test("picker profile reaches Discord settings and encoding without capping the next share", async () => {
-    let settings = { resolution: 1080, fps: 30, soundshareEnabled: true };
-    let listener;
-    const context = browser(async options => {
-        const track = {
-            readyState: "live", stop() {}, addEventListener() {},
-            getSettings: () => ({ width: Math.round(options.video.height.max * 21 / 9), height: options.video.height.max })
-        };
-        return { getVideoTracks: () => [track] };
-    });
+const streamFixture = async (apply = async () => {}) => {
+    let settings = { resolution: 1080, fps: 30, soundshareEnabled: true }, listener, available = true;
+    let height = 720, fps = 60;
+    const warnings = [];
+    const track = {
+        readyState: "live", stop() { this.readyState = "ended"; }, addEventListener() {},
+        getSettings: () => ({ width: Math.round(height * 21 / 9), height }),
+        getConstraints: () => ({}),
+        applyConstraints: async constraints => { await apply(constraints); height = constraints.height.max; fps = constraints.frameRate.max; }
+    };
+    const context = browser(async options => { height = options.video.height.max; return { getVideoTracks: () => [track] }; });
     const quality = () => ({ capture: {}, encode: {}, bitrateTarget: 600000, bitrateMax: 8000000 });
-    const store = { getState: () => settings, initialize: value => { settings = value; }, emitChange() {}, addChangeListener: fn => { listener = fn; } };
+    const store = { getState: () => settings, initialize: value => { settings = value; }, emitChange: () => listener?.(), addChangeListener: fn => { listener = fn; } };
     context.Vencord = {
         Settings: { plugins: { WebScreenShare: { enabled: true }, "WebRichPresence (arRPC)": { enabled: false } } },
         Plugins: { plugins: { WebScreenShare: { getGoliveMaxQuality: quality } } },
-        Webpack: { onceReady: Promise.resolve(), findStore: () => store, Common: {
+        Webpack: { onceReady: Promise.resolve(), findStore: () => available ? store : null, Common: {
+            showToast: value => warnings.push(value),
             FluxDispatcher: { subscribe() {}, dispatch() {} },
             MediaEngineStore: { getMediaEngine: () => ({ connections: new Set() }) },
             UserStore: { getCurrentUser: () => ({ id: "local" }) }
@@ -120,16 +122,122 @@ test("picker profile reaches Discord settings and encoding without capping the n
     vm.runInContext(source("src/stream.js"), context);
     vm.runInContext(source("src/mods.js"), context);
     await Promise.resolve();
+    return {
+        context, track, warnings,
+        state: () => settings,
+        available: value => { available = value; },
+        select: async (height, fps = 60) => context.navigator.mediaDevices.getDisplayMedia({ video: { height, frameRate: fps }, audio: false }),
+        change: (height, fps = 60) => { settings = { ...settings, resolution: height, fps }; listener(); }
+    };
+};
+const settled = () => new Promise(resolve => setImmediate(resolve));
+
+test("picker profile reaches Discord settings and encoding without capping the next share", async () => {
+    const fixture = await streamFixture();
     for (const height of [720, 1440]) {
-        const stream = await context.navigator.mediaDevices.getDisplayMedia({ video: { height, frameRate: 60 }, audio: false });
-        const result = context.Vencord.Plugins.plugins.WebScreenShare.getGoliveMaxQuality();
-        assert.equal(settings.resolution, height);
-        assert.equal(settings.fps, 60);
-        assert.equal(settings.soundshareEnabled, true);
+        fixture.track.readyState = "live";
+        const stream = await fixture.select(height);
+        const result = fixture.context.Vencord.Plugins.plugins.WebScreenShare.getGoliveMaxQuality();
+        assert.equal(fixture.state().resolution, height);
+        assert.equal(fixture.state().fps, 60);
+        assert.equal(fixture.state().soundshareEnabled, true);
         assert.equal(result.encode.height, height);
         assert.equal(result.encode.framerate, 60);
         assert.equal(result.encode.width, Math.round(height * 21 / 9));
         stream.getVideoTracks()[0].stop();
     }
-    assert.equal(typeof listener, "function");
+});
+
+test("a rejected quality change restores the last accepted Discord and picker profile", async () => {
+    const fixture = await streamFixture(async () => { throw new Error("unsupported profile"); });
+    await fixture.select(720);
+    fixture.change(2160, 120);
+    await settled();
+    assert.equal(fixture.state().resolution, 720);
+    assert.equal(fixture.state().fps, 60);
+    assert.equal(fixture.context.Vencord.Settings.plugins.WebScreenShare.resolution, "720");
+    assert.equal(fixture.context.__discardStream.profile.height, 720);
+    assert.equal(fixture.warnings.length, 1);
+    assert.equal(fixture.track.readyState, "live");
+});
+
+test("rapid changes serialize, coalesce and roll back to the most recent success", async () => {
+    const operations = [];
+    const fixture = await streamFixture(constraints => new Promise((resolve, reject) => operations.push({ height: constraints.height.max, resolve, reject })));
+    await fixture.select(720);
+    fixture.change(1440);
+    fixture.change(2160);
+    fixture.change(1080);
+    assert.equal(operations.length, 1);
+    operations[0].resolve();
+    await settled();
+    assert.deepEqual(operations.map(value => value.height), [1440, 1080]);
+    assert.equal(fixture.state().resolution, 1080);
+    operations[1].reject(new Error("latest rejected"));
+    await settled();
+    assert.equal(fixture.state().resolution, 1440);
+    assert.equal(fixture.context.__discardStream.profile.height, 1440);
+});
+
+test("missing private modules preserve browser capture and retry next share", async () => {
+    const fixture = await streamFixture();
+    fixture.available(false);
+    const stream = await fixture.select(720);
+    assert.equal(stream.getVideoTracks()[0].readyState, "live");
+    assert.equal(fixture.warnings.length, 1);
+    fixture.available(true);
+    await fixture.select(1440);
+    assert.equal(fixture.state().resolution, 1440);
+});
+
+const workletFixture = () => {
+    let processor;
+    const context = vm.createContext({ sampleRate: 48000, currentTime: 0, ArrayBuffer, Float32Array,
+        AudioWorkletProcessor: class { port = { postMessage() {} }; },
+        registerProcessor: (_, value) => { processor = value; }
+    });
+    vm.runInContext(source("src/platform/audio-worklet.js"), context);
+    return { context, audio: new processor() };
+};
+const audioPacket = (capturedAt, value = 1, ageMs = 20) => ({ data: { samples: new Float32Array(2048).fill(value).buffer, capturedAt, ageMs } });
+
+test("worklet waits for playout time and resets after a missing packet", () => {
+    const { context, audio } = workletFixture();
+    const left = new Float32Array(128), right = new Float32Array(128);
+    audio.port.onmessage(audioPacket(1000000));
+    audio.process([], [[left, right]]);
+    assert.ok(left.every(value => value === 0));
+    context.currentTime = 0.02;
+    audio.process([], [[left, right]]);
+    assert.ok(left.every(value => value === 1));
+    audio.port.onmessage(audioPacket(1000100, 2));
+    context.currentTime = 0.04;
+    audio.process([], [[left, right]]);
+    assert.ok(left.every(value => value === 2));
+});
+
+test("worklet estimates drift and keeps its queue and correction bounded", () => {
+    const { context, audio } = workletFixture();
+    for (let i = 0; i < 120; i++) {
+        context.currentTime = i * 1024 / 48000;
+        audio.port.onmessage(audioPacket(1000000 + i * 1024 / 48.0048));
+    }
+    assert.ok(audio.sourceFramesPerMs > 48);
+    assert.ok(audio.sourceFramesPerMs <= 48 * 1.005);
+    assert.ok(audio.count >= 0 && audio.count <= audio.samples.length);
+    const output = [new Float32Array(256), new Float32Array(256)];
+    audio.process([], [output]);
+    assert.ok(output.every(channel => channel.every(Number.isFinite)));
+});
+
+test("small negative clock error resamples without inserting block-boundary silence", () => {
+    const { context, audio } = workletFixture();
+    const output = [new Float32Array(128), new Float32Array(128)];
+    audio.port.onmessage(audioPacket(1000000));
+    audio.sourceFramesPerMs = 47.99;
+    context.currentTime = 0.02;
+    audio.process([], [output]);
+    context.currentTime += 128 / 48000;
+    audio.process([], [output]);
+    assert.ok(output.every(channel => channel.every(value => value === 1)));
 });

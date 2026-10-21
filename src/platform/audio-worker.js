@@ -20,7 +20,9 @@ const post = data => {
     if (!fresh(data)) return;
     inFlight = true;
     const samples = data.slice(8);
-    port.postMessage(samples, [samples]);
+    const capturedAt = new DataView(data).getFloat64(0, true);
+    const ageMs = epoch + performance.now() - started - capturedAt;
+    port.postMessage({ samples, capturedAt, ageMs }, [samples]);
 };
 self.onmessage = ({ data }) => {
     if (socket || closed) return;

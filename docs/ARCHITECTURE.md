@@ -250,8 +250,15 @@ mute preference. An explicitly armed share creates one disposable blob Worker an
 transfers the AudioWorklet MessagePort to it. Socket reception, timestamp age checks
 and bounded delivery no longer pass through Discord's page main thread. The Worker
 rejects capture data older than 250 ms and retains one unacknowledged packet plus
-only the newest pending packet. The worklet retains its bounded stereo ring.
-The age threshold is a delivery policy, not a measured end-to-end latency bound.
+only the newest pending packet. The Worker carries capture time and packet age
+into the worklet, which retains its bounded stereo ring. A 40 ms capture-to-playout
+target absorbs packet jitter; it is a scheduling policy, not measured total latency.
+Gaps above 5 ms reset the timeline, older out-of-order packets are ignored, and
+large late offsets discard obsolete samples. A source-rate estimate over intervals
+of at least one second feeds fractional linear interpolation capped at +/-0.5%.
+Small clock offsets use resampling, not repeated silent block prefixes. No new
+main-thread sampling, polling, browser capture permission or dependency is added.
+The 250 ms packet age threshold remains a delivery policy, not an end-to-end bound.
 
 Startup has one shared ten-second deadline and preserves live browser capture on
 failure. Successful native audio replaces the browser audio track. Unexpected
@@ -263,8 +270,10 @@ listener or WASAPI recording is created without an armed audio request.
 
 No CSP, remote capability or host-object restriction is weakened. Worker/blob CSP
 support, synchronization, clock drift and received media still require real-call
-acceptance. Timestamps reject old data; they do not synchronize audio with video
-or implement sample-clock drift compensation.
+acceptance. Timestamped playout and bounded source/render clock compensation are
+implemented, but video-frame timestamps are not available to this audio adapter.
+They do not establish calibrated audio/video synchronization at the receiver.
+See the AudioWorklet timing model: https://www.w3.org/TR/webaudio/#AudioWorkletGlobalScope
 
 ## Screen-share profile handling
 
@@ -283,9 +292,19 @@ bitrate limits (target 2–24 Mbit/s, ceiling up to 32 Mbit/s, minimum 0.5 Mbit/
 Network/codec adaptation remains browser-managed. This is not a fixed encoder rate.
 
 Discord's own stream settings changes apply matching capture constraints through
-an event listener, not polling. One deferred refresh and STREAM_CREATE handle
-connection startup. Unsupported private-module shapes produce a compatibility
-warning; browser video is not discarded. The UI reflects the requested profile,
+an event listener, not polling. One application is active at a time and one
+replaceable pending request retains the latest choice. A profile is committed
+only after successful capture constraint application. Intermediate successes are
+retained as rollback points but are not republished over a newer pending choice.
+A rejection restores the last accepted Discord/picker profile without stopping
+capture; completion from an ended/replaced track is ignored. State publications
+suppress their own change listener to avoid feedback loops.
+
+One deferred refresh and STREAM_CREATE handle connection startup. Private module
+shapes are checked per share and on connection events. A not-yet-loaded store at
+initial selection is retried after capture without a premature compatibility toast.
+Replacing a store removes its old listener when supported. Unsupported shapes
+produce a compatibility warning; browser video is not discarded. The UI reflects the requested profile,
 not sampled receive-side FPS. The pinned upstream browser assets are unchanged;
 Electron-only plugins do not gain compatibility from these adapters.
 

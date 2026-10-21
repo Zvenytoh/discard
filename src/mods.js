@@ -32,17 +32,19 @@ Vencord.Webpack.onceReady.then(() => {
     const { MediaEngineStore, UserStore, FluxDispatcher, showToast } = Vencord.Webpack.Common;
     let warned = false;
     let settingsStore;
+    let pending, applying = false, publishing = false;
     const warn = () => {
         if (warned) return;
         warned = true;
         showToast?.({ text: "Les modules de stream Discord ont change. Le partage navigateur reste disponible, mais le profil Discord ne peut pas etre synchronise.", variant: "failure" });
     };
-    share.refresh = () => {
+    const refresh = () => {
         const selected = profile();
         if (!selected) return;
         const connections = MediaEngineStore?.getMediaEngine?.()?.connections;
         const user = UserStore?.getCurrentUser?.()?.id;
-        const values = connections?.values ? [...connections.values()] : Array.isArray(connections) ? connections : [];
+        if (!user || (!Array.isArray(connections) && typeof connections?.values !== "function")) { warn(); return; }
+        const values = typeof connections.values === "function" ? [...connections.values()] : connections;
         for (const connection of values) {
             if (!user || connection.streamUserId !== user) continue;
             const parameters = connection.videoStreamParameters?.[0];
@@ -55,47 +57,86 @@ Vencord.Webpack.onceReady.then(() => {
             update?.catch?.(error => { console.error("Discard stream refresh:", error); warn(); });
         }
     };
+    share.refresh = () => {
+        try { if (profile() && share.check()) refresh(); }
+        catch (error) { console.error("Discard stream refresh:", error); warn(); }
+    };
+    share.check = (starting = false) => {
+        if (starting) warned = false;
+        if (!enabledShare()) return false;
+        try {
+            const fixes = Vencord.Settings.plugins.WebScreenShareFixes;
+            if (typeof screenShare?.getGoliveMaxQuality !== "function" ||
+                (fixes?.enabled && !Vencord.Plugins.plugins.WebScreenShareFixes) ||
+                typeof MediaEngineStore?.getMediaEngine !== "function" ||
+                typeof UserStore?.getCurrentUser !== "function") { warn(); return false; }
+            // Resolve per share: Discord may lazy-load or replace this store.
+            const candidate = Vencord.Webpack.findStore("ApplicationStreamingSettingsStore");
+            if (!candidate && starting) return false;
+            if (typeof candidate?.initialize !== "function" || typeof candidate?.getState !== "function" ||
+                typeof candidate?.addChangeListener !== "function") { warn(); return false; }
+            if (settingsStore !== candidate) {
+                settingsStore?.removeChangeListener?.(fromDiscord);
+                settingsStore = candidate;
+                settingsStore.addChangeListener(fromDiscord);
+            }
+            return true;
+        } catch (error) { console.error("Discard stream compatibility:", error); warn(); return false; }
+    };
     share.changed = () => {
         const selected = profile();
-        if (!selected) return;
+        if (!selected || !share.check()) return;
+        publishing = true;
         try {
-            // This store may be lazy-loaded only when the share dialog opens.
-            if (!settingsStore) {
-                const candidate = Vencord.Webpack.findStore("ApplicationStreamingSettingsStore");
-                if (typeof candidate?.initialize === "function" && typeof candidate?.getState === "function") {
-                    settingsStore = candidate;
-                    settingsStore.addChangeListener?.(fromDiscord);
-                }
-            }
-            const store = settingsStore;
-            if (typeof store?.initialize !== "function" || typeof store?.getState !== "function") warn();
-            else {
-                const state = store.getState();
-                store.initialize({ ...state, resolution: selected.height, fps: selected.framerate, preset: 3 });
-                store.emitChange?.();
-            }
+            const state = settingsStore.getState();
+            settingsStore.initialize({ ...state, resolution: selected.height, fps: selected.framerate, preset: 3 });
+            const picker = Vencord.Settings.plugins.WebScreenShare;
+            picker.resolution = String(selected.height);
+            picker.frameRate = String(selected.framerate);
+            settingsStore.emitChange?.();
         } catch (error) { console.error("Discard stream settings:", error); warn(); }
+        finally { publishing = false; }
         share.refresh();
     };
+    const applyPending = async () => {
+        if (applying) return;
+        applying = true;
+        try {
+            while (pending) {
+                const request = pending;
+                pending = undefined;
+                const { track, height, framerate } = request;
+                if (share.track !== track || track.readyState !== "live" || !profile()) continue;
+                const previous = share.profile;
+                try {
+                    await track.applyConstraints({ ...track.getConstraints(), height: { ideal: height, max: height }, frameRate: { ideal: framerate, max: framerate } });
+                    if (share.track !== track || track.readyState !== "live") continue;
+                    const actual = track.getSettings();
+                    share.profile = { height, framerate, width: actual.width, captureHeight: actual.height };
+                    // Commit successful capture, but don't publish an obsolete request.
+                    if (!pending) share.changed();
+                } catch (error) {
+                    if (share.track !== track || track.readyState !== "live" || pending) continue;
+                    share.profile = previous;
+                    share.changed();
+                    console.error("Discard stream constraints:", error);
+                    showToast?.({ text: "Ce profil n'est pas disponible. Le dernier profil valide a ete retabli.", variant: "failure" });
+                }
+            }
+        } finally { applying = false; }
+    };
     const fromDiscord = () => {
-        const selected = profile();
-        if (!selected) return;
-        const state = settingsStore.getState();
-        const height = Number(state.resolution), framerate = Number(state.fps);
-        if (![480, 720, 1080, 1440, 2160].includes(height) || ![15, 30, 60, 120].includes(framerate)) return;
-        if (selected.height === height && selected.framerate === framerate) return;
-        const track = share.track;
-        Object.assign(selected, { height, framerate });
-        // Discord's own stream menu must update capture too, not only its label.
-        void track.applyConstraints({ ...track.getConstraints(), height: { ideal: height, max: height }, frameRate: { ideal: framerate, max: framerate } }).then(() => {
-            if (share.track !== track || track.readyState !== "live") return;
-            const actual = track.getSettings();
-            Object.assign(selected, { width: actual.width, captureHeight: actual.height });
-            share.refresh();
-        }).catch(error => {
-            console.error("Discard stream constraints:", error);
-            showToast?.({ text: "Le navigateur ne peut pas appliquer ce profil de partage. Le partage actuel continue.", variant: "failure" });
-        });
+        try {
+            if (publishing) return;
+            const selected = profile();
+            if (!selected) return;
+            const state = settingsStore.getState();
+            const height = Number(state.resolution), framerate = Number(state.fps);
+            if (![480, 720, 1080, 1440, 2160].includes(height) || ![15, 30, 60, 120].includes(framerate)) return;
+            if (!applying && selected.height === height && selected.framerate === framerate) return;
+            pending = { track: share.track, height, framerate };
+            void applyPending().catch(error => { console.error("Discard stream profile:", error); warn(); });
+        } catch (error) { console.error("Discard stream settings:", error); warn(); }
     };
     FluxDispatcher.subscribe("STREAM_CREATE", share.refresh);
     share.changed();

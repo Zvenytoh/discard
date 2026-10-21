@@ -194,3 +194,12 @@ source aspect ratio. Plugin disable flags are respected; private-API fallback
 warns instead of pretending every plugin works. Windows real-call and Worker CSP
 acceptance remain pending. Regression cases were added, but not run because the
 project requires an explicit request for unit/functional runs.
+
+## v0.3.9 follow-up
+
+Quality updates now retain a last accepted profile, serialize applyConstraints,
+and coalesce pending choices. Module shapes are checked per share and connection.
+The worklet receives capture timing, resets at gaps and estimates source-clock
+rate for bounded interpolation. This addresses the missing local drift handling,
+without claiming receiver A/V calibration, validated pitch/quality or fixed latency.
+The remaining real-call/Worker-CSP/platform acceptance gaps above remain open.

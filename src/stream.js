@@ -11,6 +11,8 @@
         const height = Number(options?.video?.height);
         const framerate = Number(options?.video?.frameRate);
         if (!picker?.enabled || ![480, 720, 1080, 1440, 2160].includes(height) || ![15, 30, 60, 120].includes(framerate)) return capture(...args);
+        try { bridge.check?.(true); }
+        catch (error) { console.error("Discard stream compatibility:", error); }
         // Replace inherited limits from the previous share, preserving source aspect ratio.
         const video = { ...options.video, height: { ideal: height, max: height }, frameRate: { ideal: framerate, max: framerate } };
         delete video.width;
