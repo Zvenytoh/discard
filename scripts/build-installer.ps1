@@ -33,7 +33,9 @@ if ($signature.Status -ne 'Valid' -or
 & $compiler.FullName "/DAppVersion=$version" (Join-Path $root 'installer/Discard.iss')
 if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compilation failed.' }
 Copy-Item -LiteralPath (Join-Path $root 'target/release/discard.exe') -Destination (Join-Path $distribution 'Discard.exe') -Force
-$assets = @('Discard-Setup.exe', 'Discard.exe')
+$brandKit = Join-Path $distribution 'Discard-Brand-Kit.zip'
+Compress-Archive -Path (Join-Path $root 'assets/branding/comete/*') -DestinationPath $brandKit -Force
+$assets = @('Discard-Setup.exe', 'Discard.exe', 'Discard-Brand-Kit.zip')
 $loader = Join-Path $root 'target/release/WebView2Loader.dll'
 if (Test-Path -LiteralPath $loader) {
     Copy-Item -LiteralPath $loader -Destination $distribution -Force

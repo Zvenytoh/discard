@@ -1,23 +1,15 @@
-# Discard logo
+# Discard logo — Comete
 
-An abstract folded-paper wing in coral and tangerine, with a lightning-shaped
-negative-space seam. Generated with the built-in ImageGen tool using the
-`logo-design` and `imagegen` skills.
+The user selected Orbite variant 10 (Comete) on 2026-10-25: an open violet ring
+and orange comet-shaped satellite. It replaces the earlier coral paper-wing.
 
-- `logo.png`: transparent raster master, 1254 × 1254 pixels.
-- `icon.ico`: Windows export with 16, 24, 32, 48, 64, 128 and 256 pixel frames.
+- Editable vector: logo.svg and branding/comete/discard-symbol.svg.
+- Transparent PNG master: logo.png, 1024x1024 RGBA.
+- Windows icon: icon.ico, with 16/24/32/48/64/128/256 px frames.
+- Tauri icons: icons/*.png, icon.ico and icon.icns use the same approved master.
+- README/release kit: branding/comete contains signatures, banners, web icons
+  and BRAND.md with colour, typography, spacing, usage and validation notes.
 
-The README uses the PNG. `assets/icons/` contains platform PNG/ICO/ICNS variants
-generated from this master with tauri-cli 2.12.3:
-
-```sh
-cargo tauri icon assets/logo.png --output assets/icons
-```
-
-Tauri embeds the configured application/bundle icons. Windows setup, installed
-shortcuts and the uninstall entry use the ICO. The coral artwork is unchanged.
-This is raster artwork, not an editable vector.
-
-## Generation prompt
-
-Use case: logo-brand. Design ONE original, expertly crafted brand symbol for Discard, a lightweight native Windows application for Discord Web. This is a new design direction. Absolutely NO capital D, NO letter monogram, NO rounded square app tile, NO generic chat bubble and NO Discord controller/face. Concept: an abstract folded-paper swift, formed by two broad interlocking angular ribbon planes, with one precise lightning-shaped negative-space seam that makes the silhouette feel light, agile and conversational. It should read as a premium abstract paper-wing emblem, not a literal detailed bird, not a paper airplane clipart. Asymmetric yet perfectly balanced visual weight; clear sweeping silhouette with a distinctive angled leading tip and compact grounded lower fold. Sophisticated brand identity, exceptional geometric proportions, professionally drawn crisp vector-like contours, generous negative space, thick sturdy geometry that survives 16px. Restrained warm palette: saturated vermilion coral for the principal plane and warm tangerine for the folded underside; at most two bold solid colors, optional subtle tonal facet only where it explains the fold. Flat frontal graphic, zero 3D rendering, zero cast shadows, zero glow, zero textures, zero decorative background. Transparent alpha background, standalone emblem with 12 percent safe margin around it, centered in a square high-resolution image. No text, no lettering, no wordmark, no slogan, no watermark, no presentation board. Produce a finished mark suitable for both a GitHub README header and a Windows application icon on light or dark backgrounds.
+Runtime branding comes only from these production assets. Concept alternatives
+are not part of the application or distribution. No Discord profile, app identity,
+installer upgrade identity or updater verification setting is changed.

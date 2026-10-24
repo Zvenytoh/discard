@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/logo.png" width="144" height="144" alt="Discard logo">
+  <img src="assets/branding/comete/readme-banner.png" width="840" alt="Discard — Your conversations. Your space.">
   <h1>Discard</h1>
   <p><strong>A focused desktop home for Discord Web.</strong></p>
   <p>Built with Rust and Tauri. Powered by your platform's webview.</p>
@@ -35,7 +35,7 @@ system codec or guarantee compatibility with every graphics stack.
 
 ### What the candidate includes
 
-- One native window with the coral Discard icon, dark appearance, and persistent
+- One native window with the violet-and-orange Comete icon, dark appearance, and persistent
   engine data. Windows retains Discord's own header, SVG icons and actions,
   with a centered title and responsive native window controls. Closing the window hides it to the system tray. Use **Ouvrir
   Discard** to restore it or **Quitter** to exit completely.
@@ -181,6 +181,12 @@ Linux stores webview data under Tauri's app-local data directory for
 `~/.local/share/com.zvenytoh.discard/webview`). macOS uses a fixed persistent
 WKWebView data-store identifier. There is no cross-platform cookie migration.
 Treat engine data as private account/session information.
+
+## Brand assets
+
+The [Comete brand kit](assets/branding/comete/BRAND.md) includes editable SVG
+masters, light/dark signatures, icons and release artwork. A downloadable kit
+is included with the Windows release.
 
 ## Development
 

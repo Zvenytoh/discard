@@ -138,6 +138,7 @@ jobs:
           mkdir distribution
           cp artifacts/discard-windows-x64/Discard-Setup.exe distribution/
           cp artifacts/discard-windows-x64/Discard.exe distribution/
+          cp artifacts/discard-windows-x64/Discard-Brand-Kit.zip distribution/
           cp artifacts/discard-windows-x64/Discard-Setup.exe.sig distribution/
           python3 - <<'PY'
           import json, os
@@ -155,7 +156,7 @@ jobs:
           }
           Path("distribution/latest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
           PY
-          printf '%s\n' 'Windows x64 release. The installer is signed for Discard startup updates; executables are not Authenticode-signed. The Windows native title bar matches the supplied Discord reference. macOS and Linux packages are not included in this release.' > release-notes.md
+          printf '%s\n' 'Windows x64 release with the Comete brand identity across application, tray, installer and shortcuts. Discard-Brand-Kit.zip includes editable logos, icons, banners and brand guidance. The installer is signed for Discard startup updates; executables are not Authenticode-signed. macOS and Linux packages are not included in this release.' > release-notes.md
           cd distribution
           sha256sum -- Discard* latest.json > SHA256SUMS.txt
       - name: Publish one release after all native builds succeed

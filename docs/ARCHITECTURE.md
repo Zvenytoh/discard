@@ -125,7 +125,7 @@ are stored in GitHub Actions secrets, never in source; only the public key is em
 
 ## Appearance and background policy
 
-The existing coral artwork supplies native executable/bundle, taskbar/Dock,
+The approved Comete vector artwork supplies native executable/bundle, taskbar/Dock,
 shortcut and installer icons. Windows retains Discord's actual 32-pixel top bar:
 the live title, SVG icons, inbox/help actions and their native page interactions.
 Static CSS centers the title and reserves 132 logical pixels at the right for
