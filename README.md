@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/branding/comete/readme-banner.png" width="840" alt="Discard — Your conversations. Your space.">
+  <img src="assets/logo.png" width="128" alt="Discard — Blue D app icon">
   <h1>Discard</h1>
   <p><strong>A focused desktop home for Discord Web.</strong></p>
   <p>Built with Rust and Tauri. Powered by your platform's webview.</p>
@@ -35,12 +35,16 @@ system codec or guarantee compatibility with every graphics stack.
 
 ### What the candidate includes
 
-- One native window with the violet-and-orange Comete icon, dark appearance, and persistent
+- One native window with the blue-and-cyan D icon, dark appearance, and persistent
   engine data. Windows retains Discord's own header, SVG icons and actions,
   with a centered title and responsive native window controls. Closing the window hides it to the system tray. Use **Ouvrir
   Discard** to restore it or **Quitter** to exit completely.
 - Main-frame navigation restricted to HTTPS on the exact `discord.com` host,
-  port 443, without embedded credentials. Pop-ups and downloads are blocked.
+  port 443, without embedded credentials. On Windows, clicked HTTP(S) links open
+  in your default browser; new app windows and downloads remain blocked.
+- Installed Windows builds launch at sign-in by default. Uncheck **Launch Discard
+  when I sign in to Windows** during installation to opt out. Portable builds do
+  not register themselves for startup. The shortcut is removed on uninstall.
 - No application-native commands or capability grants for remote
   content. Tauri still uses framework-internal scripts and IPC.
 - Event-driven Windows background handling: hide rendering when minimized or hidden.
@@ -184,9 +188,9 @@ Treat engine data as private account/session information.
 
 ## Brand assets
 
-The [Comete brand kit](assets/branding/comete/BRAND.md) includes editable SVG
-masters, light/dark signatures, icons and release artwork. A downloadable kit
-is included with the Windows release.
+The current [Blue D app icon](assets/branding/blue-d/BRAND.md) is supplied as
+editable SVG and PNG artwork, with native app icon exports. A downloadable kit
+is included with the Windows release. The older Comete artwork is archived.
 
 ## Development
 

@@ -75,11 +75,17 @@ optimizations must not turn into fatal startup failures.
 
 ## Remote-content boundary
 
+Windows Setup creates a per-user Startup shortcut by default, with a visible
+opt-out task. Setup remembers prior task choices; deselection removes only this
+shortcut. Uninstall removes it as well. Portable builds do not register startup.
+
 - Parse main-frame URLs with `url`: require HTTPS, exact `discord.com`, effective
   port 443, and empty username/password. Prefix matching is insufficient.
-- Deny new webviews and requested downloads. A user-initiated support.discord.com
-  popup opens only the fixed official support homepage in the system browser.
-  Other popups remain denied; the native handler checks the gesture and URL origin.
+- Deny new webviews and requested downloads. On Windows, user-initiated HTTP(S)
+  popups and external main-frame links open in the system browser. Parse the URL,
+  require a host and no credentials, and pass it as a shell target without command
+  arguments. Other schemes, automatic popups and external redirects stay blocked.
+  Main-frame links also remain canceled inside the webview. No page IPC is added.
 - Main-frame navigation policy is not a subresource firewall. Discord's CDN and
   engine-managed requests retain normal browser security behavior.
 - Configure no application invoke handler, privileged remote capability grants
@@ -125,7 +131,7 @@ are stored in GitHub Actions secrets, never in source; only the public key is em
 
 ## Appearance and background policy
 
-The approved Comete vector artwork supplies native executable/bundle, taskbar/Dock,
+The approved Blue D vector artwork supplies native executable/bundle, taskbar/Dock,
 shortcut and installer icons. Windows retains Discord's actual 32-pixel top bar:
 the live title, SVG icons, inbox/help actions and their native page interactions.
 Static CSS centers the title and reserves 132 logical pixels at the right for
@@ -289,7 +295,10 @@ It updates only the local stream's videoStreamParameters and asks the connection
 to refresh quality. The getGoliveMaxQuality adapter applies the live profile's
 actual width, capped source height and selected FPS, with resolution/FPS-dependent
 bitrate limits (target 2–24 Mbit/s, ceiling up to 32 Mbit/s, minimum 0.5 Mbit/s).
-Network/codec adaptation remains browser-managed. This is not a fixed encoder rate.
+Dimensions are read from the live track at quality evaluation, including after a
+source resize or switch. Bitrate scales with the actual encoded pixel area rather
+than assuming every source is 16:9. Network/codec adaptation remains browser-managed.
+This is not a fixed encoder rate.
 
 Discord's own stream settings changes apply matching capture constraints through
 an event listener, not polling. One application is active at a time and one

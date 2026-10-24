@@ -29,6 +29,7 @@ RestartApplications=no
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
+Name: "startup"; Description: "Launch Discard when I sign in to Windows"
 
 [Files]
 Source: "..\LICENSE"; DestDir: "{app}\licenses"; Flags: ignoreversion
@@ -44,6 +45,10 @@ Source: "..\target\dependencies\MicrosoftEdgeWebview2Setup.exe"; Flags: dontcopy
 [Icons]
 Name: "{autoprograms}\Discard"; Filename: "{app}\discard.exe"; IconFilename: "{app}\discard.ico"; AppUserModelID: "Zvenytoh.Discard"
 Name: "{autodesktop}\Discard"; Filename: "{app}\discard.exe"; IconFilename: "{app}\discard.ico"; AppUserModelID: "Zvenytoh.Discard"; Tasks: desktopicon
+Name: "{userstartup}\Discard"; Filename: "{app}\discard.exe"; IconFilename: "{app}\discard.ico"; AppUserModelID: "Zvenytoh.Discard"; Tasks: startup
+
+[InstallDelete]
+Type: files; Name: "{userstartup}\Discard.lnk"; Tasks: not startup
 
 [Run]
 Filename: "{app}\discard.exe"; Description: "Launch Discard"; Flags: nowait postinstall skipifsilent

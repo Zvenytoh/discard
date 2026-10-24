@@ -3,9 +3,20 @@
 const share = window.__discardStream;
 const screenShare = Vencord.Plugins.plugins.WebScreenShare;
 const enabledShare = () => Vencord.Settings.plugins.WebScreenShare?.enabled;
-const profile = () => enabledShare() && share?.track?.readyState === "live" ? share.profile : null;
+const profile = () => {
+    if (!enabledShare() || share?.track?.readyState !== "live" || !share.profile) return null;
+    // A captured window can resize or switch surfaces without replacing its track.
+    const actual = share.track.getSettings();
+    if (actual.width > 0 && actual.height > 0) {
+        share.profile.width = actual.width;
+        share.profile.captureHeight = actual.height;
+    }
+    return share.profile;
+};
 const limits = selected => {
-    const target = Math.round(Math.min(24000000, Math.max(2000000, 6000000 * (selected.height / 1080) ** 2 * selected.framerate / 60)));
+    const height = Math.min(selected.height, selected.captureHeight || selected.height);
+    const pixels = (selected.width || height * 16 / 9) * height;
+    const target = Math.round(Math.min(24000000, Math.max(2000000, 6000000 * pixels / (1920 * 1080) * selected.framerate / 60)));
     return { bitrateMin: 500000, bitrateTarget: target, bitrateMax: Math.round(target * 4 / 3) };
 };
 if (screenShare?.getGoliveMaxQuality) {
