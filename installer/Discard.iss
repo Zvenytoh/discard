@@ -55,6 +55,49 @@ Filename: "{app}\discard.exe"; Description: "Launch Discard"; Flags: nowait post
 Filename: "{app}\discard.exe"; Flags: nowait skipifnotsilent; Check: IsUpdaterInstall
 
 [Code]
+procedure NotifyShellPath(EventId: Integer; Flags: Cardinal; Item1: string; Item2: NativeInt);
+  external 'SHChangeNotify@shell32.dll stdcall';
+procedure NotifyShellIcons(EventId: Integer; Flags: Cardinal; Item1, Item2: NativeInt);
+  external 'SHChangeNotify@shell32.dll stdcall';
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  PinnedDirectory, ShortcutPath, TargetPath: string;
+  Entry: TFindRec;
+  Shell, Shortcut: Variant;
+begin
+  if CurStep <> ssPostInstall then Exit;
+  { Refresh Explorer's icon cache after replacing the installed artwork. }
+  NotifyShellIcons($08000000, $2000, 0, 0);
+  NotifyShellPath($2000, $2005, ExpandConstant('{app}\discard.ico'), 0);
+  NotifyShellPath($2000, $2005, ExpandConstant('{app}\discard.exe'), 0);
+  { Windows 11 also needs a notification for the existing pinned shortcut. }
+  try
+    Shell := CreateOleObject('WScript.Shell');
+  except
+    Log('Pinned icon refresh unavailable: ' + GetExceptionMessage);
+    Exit;
+  end;
+  PinnedDirectory := ExpandConstant('{userappdata}\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\');
+  if not FindFirst(PinnedDirectory + '*.lnk', Entry) then Exit;
+  try
+    repeat
+      ShortcutPath := PinnedDirectory + Entry.Name;
+      try
+        Shortcut := Shell.CreateShortcut(ShortcutPath);
+        TargetPath := Shortcut.TargetPath;
+        if CompareText(ExpandFileName(TargetPath),
+          ExpandConstant('{app}\discard.exe')) = 0 then
+          NotifyShellPath($2000, $2005, ShortcutPath, 0);
+      except
+        Log('Could not inspect pinned shortcut: ' + ShortcutPath);
+      end;
+    until not FindNext(Entry);
+  finally
+    FindClose(Entry);
+  end;
+end;
+
 function IsUpdaterInstall: Boolean;
 begin
   Result := WizardSilent and (ExpandConstant('{param:DISCARDUPDATE|0}') = '1');

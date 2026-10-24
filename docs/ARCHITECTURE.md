@@ -132,7 +132,12 @@ are stored in GitHub Actions secrets, never in source; only the public key is em
 ## Appearance and background policy
 
 The approved Blue D vector artwork supplies native executable/bundle, taskbar/Dock,
-shortcut and installer icons. Windows retains Discord's actual 32-pixel top bar:
+shortcut and installer icons.
+After installation or upgrade, Setup notifies Explorer of the changed artwork
+and matching pinned shortcut targets, including Windows 11. It does not rewrite
+pins, delete cache files or restart Explorer. Visible refresh remains subject to
+Windows shell behavior and requires a real upgrade acceptance check.
+Windows retains Discord's actual 32-pixel top bar:
 the live title, SVG icons, inbox/help actions and their native page interactions.
 Static CSS centers the title and reserves 132 logical pixels at the right for
 three native owner-drawn BUTTON controls, each 44 by 32 logical pixels. Buttons
