@@ -55,9 +55,10 @@ Filename: "{app}\discard.exe"; Description: "Launch Discard"; Flags: nowait post
 Filename: "{app}\discard.exe"; Flags: nowait skipifnotsilent; Check: IsUpdaterInstall
 
 [Code]
-procedure NotifyShellPath(EventId: Integer; Flags: Cardinal; Item1: string; Item2: NativeInt);
+{ Inno Setup 6 runs a 32-bit installer, including in 64-bit install mode. }
+procedure NotifyShellPath(EventId: Integer; Flags: Cardinal; Item1: string; Item2: LongWord);
   external 'SHChangeNotify@shell32.dll stdcall';
-procedure NotifyShellIcons(EventId: Integer; Flags: Cardinal; Item1, Item2: NativeInt);
+procedure NotifyShellIcons(EventId: Integer; Flags: Cardinal; Item1, Item2: LongWord);
   external 'SHChangeNotify@shell32.dll stdcall';
 
 procedure CurStepChanged(CurStep: TSetupStep);
